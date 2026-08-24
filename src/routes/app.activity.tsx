@@ -1,12 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
 import { History } from "lucide-react";
 
 import { CredentialStatusBadge } from "@/components/product/credential-status-badge";
 import { StateView } from "@/components/product/state-view";
 import { Skeleton } from "@/components/ui/skeleton";
-import { verificationQueries } from "@/features/verification/mock-service";
+import { sessionQueries } from "@/features/verification/session-service";
 
 export const Route = createFileRoute("/app/activity")({
   head: () => ({
@@ -29,7 +29,7 @@ const METHOD_LABELS = {
 } as const;
 
 function ActivityPage() {
-  const recent = useQuery(verificationQueries.recent());
+  const history = useQuery(sessionQueries.history());
 
   return (
     <div className="max-w-xl">
@@ -41,14 +41,14 @@ function ActivityPage() {
       </header>
 
       <div className="mt-7">
-        {recent.isPending && (
+        {history.isPending && (
           <div className="space-y-3" aria-label="Loading activity">
             <Skeleton className="h-24 w-full rounded-lg" />
             <Skeleton className="h-24 w-full rounded-lg" />
           </div>
         )}
 
-        {recent.isError && (
+        {history.isError && (
           <StateView
             icon={History}
             title="Couldn't load activity"
@@ -56,7 +56,7 @@ function ActivityPage() {
             action={
               <button
                 type="button"
-                onClick={() => recent.refetch()}
+                onClick={() => history.refetch()}
                 className="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 text-body-sm font-medium text-foreground hover:bg-muted"
               >
                 Retry
@@ -65,23 +65,50 @@ function ActivityPage() {
           />
         )}
 
-        {recent.data && (
+        {history.data?.length === 0 && (
+          <StateView
+            icon={History}
+            title="No verifications yet"
+            body="Completed verifications appear here with the exact level of certainty each one reached."
+            action={
+              <Link
+                to="/app/verify"
+                className="inline-flex min-h-11 items-center rounded-md bg-accent px-4 text-body-sm font-semibold text-accent-foreground hover:bg-accent-strong"
+              >
+                Verify an official
+              </Link>
+            }
+          />
+        )}
+
+        {history.data && history.data.length > 0 && (
           <ul className="space-y-3">
-            <li className="rounded-lg border border-border bg-surface-strong p-4 shadow-elev-1">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-display text-card-title text-foreground">
-                  {recent.data.subjectName}
-                </p>
-                <CredentialStatusBadge status={recent.data.outcome} />
-              </div>
-              <p className="mt-1 text-body-sm text-foreground-muted">
-                {recent.data.subjectDesignation} · {METHOD_LABELS[recent.data.method]}
-              </p>
-              <p className="mt-2 text-metadata text-foreground-subtle">
-                {formatDistanceToNow(new Date(recent.data.occurredAt), { addSuffix: true })} ·
-                session <span className="font-display tracking-wide">{recent.data.sessionId}</span>
-              </p>
-            </li>
+            {history.data.map((entry) => (
+              <li
+                key={entry.sessionId}
+                className="rounded-lg border border-border bg-surface-strong shadow-elev-1"
+              >
+                <Link
+                  to="/app/verify/receipt/$id"
+                  params={{ id: entry.sessionId }}
+                  className="block rounded-lg p-4 transition-colors hover:bg-muted"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-display text-card-title text-foreground">
+                      {entry.subjectName}
+                    </p>
+                    <CredentialStatusBadge status={entry.outcome} />
+                  </div>
+                  <p className="mt-1 text-body-sm text-foreground-muted">
+                    {entry.subjectDesignation} · {METHOD_LABELS[entry.method]}
+                  </p>
+                  <p className="mt-2 text-metadata text-foreground-subtle">
+                    {formatDistanceToNow(new Date(entry.occurredAt), { addSuffix: true })} · session{" "}
+                    <span className="font-display tracking-wide">{entry.sessionId}</span>
+                  </p>
+                </Link>
+              </li>
+            ))}
           </ul>
         )}
       </div>

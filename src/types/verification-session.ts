@@ -106,6 +106,16 @@ export type ConfirmationState =
   | "timeout"
   | "failed";
 
+/**
+ * The subset of confirmation states an official desk can *settle* on.
+ * `request_ready`, `request_sent` and `pending` are in-flight states owned by
+ * the session, never a scenario's declared outcome.
+ */
+export type ConfirmationResolution = Extract<
+  ConfirmationState,
+  "accepted" | "rejected" | "expired" | "timeout" | "failed"
+>;
+
 export interface OfficialConfirmation {
   state: ConfirmationState;
   /** Which desk the request was routed to (synthetic). */

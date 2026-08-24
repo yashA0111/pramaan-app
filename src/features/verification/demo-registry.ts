@@ -8,7 +8,7 @@
 
 import type { CredentialSummary } from "@/types/verification";
 import type {
-  ConfirmationState,
+  ConfirmationResolution,
   CredentialOutcome,
   FaceState,
   IdentityMatchResult,
@@ -23,8 +23,8 @@ export interface DemoScenario {
   credential: CredentialSummary | null;
   /** Outcome the biometric mock reports for a clean single-face observation. */
   identity: { status: FaceState; matchResult: IdentityMatchResult; confidence: number | null };
-  /** Final resolution of the official confirmation request. */
-  confirmation: Exclude<ConfirmationState, "request_ready" | "request_sent" | "pending">;
+  /** Terminal resolution the mocked official desk produces for this reference. */
+  confirmation: ConfirmationResolution;
   /** Set when the credential leg should fail at the service boundary. */
   serviceFailure?: boolean;
 }
@@ -106,7 +106,7 @@ export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
   },
   "PRM-DEMO-0007": {
     reference: "PRM-DEMO-0007",
-    label: "Valid credential · identity inconclusive, manual review",
+    label: "Valid credential · identity inconclusive → official resolves it",
     credentialOutcome: "valid",
     credential: credential({
       credentialId: "PRM-DEMO-0007",
@@ -115,7 +115,10 @@ export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
       posting: "District Unit V, New Delhi",
     }),
     identity: { status: "requires_review", matchResult: "inconclusive", confidence: 0.58 },
-    confirmation: "pending" as never,
+    // The face comparison could not conclude, so the official desk is the
+    // deciding authority here: it accepts the posting. The receipt still
+    // reports identity as inconclusive — confirmation never backfills a match.
+    confirmation: "accepted",
   },
   "PRM-DEMO-0008": {
     reference: "PRM-DEMO-0008",

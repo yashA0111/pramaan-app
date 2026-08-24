@@ -465,7 +465,9 @@ export function pollOfficialConfirmation(sessionId: string): Promise<Verificatio
         case "accepted":
           session.confirmation.state = "accepted";
           session.confirmation.reason = "Duty officer confirmed the posting and the request.";
-          session.state = "final_verified";
+          session.state = session.identity?.matchResult === "match"
+            ? "final_verified"
+            : "confirmation_resolved";
           session.currentStage = "receipt";
           break;
         case "rejected":
