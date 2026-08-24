@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "21st": {
+      "enabled": false
+    },
+    "motionsites": {
+      "enabled": false
+    }
+  }
+}
