@@ -125,10 +125,23 @@ export interface FileRouteTypes {
     | '/app/activity'
     | '/app/safety'
     | '/app/verify'
+    | '/app/verify/'
+    | '/app/verify/scan'
+    | '/app/verify/session/$id'
+    | '/app/verify/receipt/$id'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    '/' | '/official' | '/app/activity' | '/app/safety' | '/app/verify' | '/app'
+    | '/'
+    | '/official'
+    | '/app/activity'
+    | '/app/safety'
+    | '/app/verify'
+    | '/app/verify/'
+    | '/app/verify/scan'
+    | '/app/verify/session/$id'
+    | '/app/verify/receipt/$id'
+    | '/app'
   id:
     | '__root__'
     | '/'
@@ -137,6 +150,10 @@ export interface FileRouteTypes {
     | '/app/activity'
     | '/app/safety'
     | '/app/verify'
+    | '/app/verify/'
+    | '/app/verify/scan'
+    | '/app/verify/session/$id'
+    | '/app/verify/receipt/$id'
     | '/app/'
   fileRoutesById: FileRoutesById
 }
