@@ -56,12 +56,7 @@ export const DEMO_PROGRESS: VerificationProgressViewModel = {
     { id: "issuer", label: "Issuer", state: "success", detail: "Issuing authority recognized" },
     { id: "status", label: "Status", state: "success", detail: "Active · not revoked" },
     { id: "match", label: "Match", state: "current", detail: "Comparing presented identity" },
-    {
-      id: "confirm",
-      label: "Confirm",
-      state: "pending",
-      detail: "Official confirmation if needed",
-    },
+    { id: "confirm", label: "Confirm", state: "pending", detail: "Official confirmation if needed" },
     { id: "receipt", label: "Receipt", state: "pending" },
   ],
 };
