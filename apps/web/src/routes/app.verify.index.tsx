@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ScanLine } from "lucide-react";
+import { ScanFace, ScanLine } from "lucide-react";
 
 import { TrustSignal } from "@/components/product/trust-signal";
 import { VerificationProgress } from "@/components/product/verification-progress";
@@ -46,12 +46,12 @@ export const Route = createFileRoute("/app/verify/")({
       { title: "Verify an official — Pramaan" },
       {
         name: "description",
-        content: "Scan a government credential QR code and walk the verification pipeline.",
+        content: "Scan a government credential QR code or use the alternate face-identification path.",
       },
       { property: "og:title", content: "Verify an official — Pramaan" },
       {
         property: "og:description",
-        content: "Scan a government credential QR code and walk the verification pipeline.",
+        content: "Scan a government credential QR code or use the alternate face-identification path.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -81,15 +81,24 @@ function VerifyEntry() {
           </p>
         </header>
 
-        <Link
-          to="/app/verify/scan"
-          className="mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2.5 rounded-lg bg-accent px-5 text-body font-semibold text-accent-foreground transition-colors hover:bg-accent-strong sm:w-auto"
-        >
-          <ScanLine className="size-5" aria-hidden="true" />
-          Scan a credential
-        </Link>
+        <div className="mt-7 grid gap-3 sm:grid-cols-2">
+          <Link
+            to="/app/verify/scan"
+            className="inline-flex min-h-12 items-center justify-center gap-2.5 rounded-lg bg-accent px-5 text-body font-semibold text-accent-foreground transition-colors hover:bg-accent-strong"
+          >
+            <ScanLine className="size-5" aria-hidden="true" />
+            Scan a credential
+          </Link>
+          <Link
+            to="/app/verify/face"
+            className="inline-flex min-h-12 items-center justify-center gap-2.5 rounded-lg border border-border-strong bg-surface-strong px-5 text-body font-semibold text-foreground transition-colors hover:bg-muted"
+          >
+            <ScanFace className="size-5" aria-hidden="true" />
+            Identify by face
+          </Link>
+        </div>
         <p className="mt-2.5 text-metadata text-foreground-subtle">
-          Your camera is used only while the scanner is open. Nothing is uploaded.
+          Face-first identification is an alternate path for cases where the credential QR is unavailable. A face candidate is not, by itself, proof of government authority.
         </p>
 
         <TrustSignal
