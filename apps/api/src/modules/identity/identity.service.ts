@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { FastApiBiometricAdapter } from "./fastapi-biometric.adapter";
 import {
+  FaceIdentificationInputDto,
+  FaceIdentificationResult,
   IdentityVerificationInputDto,
   IdentityVerificationResult,
 } from "./identity.types";
@@ -14,5 +16,9 @@ export class IdentityService {
     input: IdentityVerificationInputDto,
   ): Promise<IdentityVerificationResult> {
     return this.biometricAdapter.verifyIdentity(credentialReference, input);
+  }
+
+  async identifyFace(input: FaceIdentificationInputDto): Promise<FaceIdentificationResult> {
+    return this.biometricAdapter.identifyFace(input);
   }
 }
