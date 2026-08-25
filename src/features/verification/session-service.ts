@@ -644,13 +644,14 @@ export function getTrustReceipt(sessionId: string): Promise<TrustReceiptViewMode
 export function buildReceipt(session: VerificationSession): TrustReceiptViewModel {
   const credentialValid = session.credentialOutcome === "valid";
   const identityMatched = session.identity?.matchResult === "match";
+  const identityMismatch = session.identity?.matchResult === "mismatch";
   const officiallyConfirmed = session.confirmation.state === "accepted";
 
   const finalState: TrustReceiptViewModel["finalState"] = officiallyConfirmed && identityMatched && credentialValid
     ? "final_verified"
     : credentialValid && identityMatched
       ? "identity_matched_only"
-      : credentialValid
+        : credentialValid && !identityMismatch
         ? "credential_valid_only"
         : "not_verified";
 

@@ -16,10 +16,14 @@ import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppActivityRouteImport } from './routes/app.activity'
 import { Route as AppSafetyRouteImport } from './routes/app.safety'
 import { Route as AppVerifyRouteImport } from './routes/app.verify'
+import { Route as AppSafetyIndexRouteImport } from './routes/app.safety.index'
+import { Route as AppSafetyPoliceRouteImport } from './routes/app.safety.police'
+import { Route as AppSafetySosRouteImport } from './routes/app.safety.sos'
 import { Route as AppVerifyIndexRouteImport } from './routes/app.verify.index'
 import { Route as AppVerifyScanRouteImport } from './routes/app.verify.scan'
-import { Route as AppVerifySessionRouteImport } from './routes/app.verify.session.$id'
-import { Route as AppVerifyReceiptRouteImport } from './routes/app.verify.receipt.$id'
+import { Route as AppSafetyPoliceIdRouteImport } from './routes/app.safety.police.$id'
+import { Route as AppVerifyReceiptIdRouteImport } from './routes/app.verify.receipt.$id'
+import { Route as AppVerifySessionIdRouteImport } from './routes/app.verify.session.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -56,24 +60,44 @@ const AppVerifyRoute = AppVerifyRouteImport.update({
   path: '/verify',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSafetyIndexRoute = AppSafetyIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppSafetyRoute,
+} as any)
+const AppSafetyPoliceRoute = AppSafetyPoliceRouteImport.update({
+  id: '/police',
+  path: '/police',
+  getParentRoute: () => AppSafetyRoute,
+} as any)
+const AppSafetySosRoute = AppSafetySosRouteImport.update({
+  id: '/sos',
+  path: '/sos',
+  getParentRoute: () => AppSafetyRoute,
+} as any)
 const AppVerifyIndexRoute = AppVerifyIndexRouteImport.update({
-  id: '/app/verify/',
+  id: '/',
   path: '/',
   getParentRoute: () => AppVerifyRoute,
 } as any)
 const AppVerifyScanRoute = AppVerifyScanRouteImport.update({
-  id: '/app/verify/scan',
+  id: '/scan',
   path: '/scan',
   getParentRoute: () => AppVerifyRoute,
 } as any)
-const AppVerifySessionRoute = AppVerifySessionRouteImport.update({
-  id: '/app/verify/session/$id',
-  path: '/session/$id',
+const AppSafetyPoliceIdRoute = AppSafetyPoliceIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AppSafetyPoliceRoute,
+} as any)
+const AppVerifyReceiptIdRoute = AppVerifyReceiptIdRouteImport.update({
+  id: '/receipt/$id',
+  path: '/receipt/$id',
   getParentRoute: () => AppVerifyRoute,
 } as any)
-const AppVerifyReceiptRoute = AppVerifyReceiptRouteImport.update({
-  id: '/app/verify/receipt/$id',
-  path: '/receipt/$id',
+const AppVerifySessionIdRoute = AppVerifySessionIdRouteImport.update({
+  id: '/session/$id',
+  path: '/session/$id',
   getParentRoute: () => AppVerifyRoute,
 } as any)
 
@@ -82,25 +106,31 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteWithChildren
   '/official': typeof OfficialRoute
   '/app/activity': typeof AppActivityRoute
-  '/app/safety': typeof AppSafetyRoute
-  '/app/verify': typeof AppVerifyRoute
-  '/app/verify/': typeof AppVerifyIndexRoute
-  '/app/verify/scan': typeof AppVerifyScanRoute
-  '/app/verify/session/$id': typeof AppVerifySessionRoute
-  '/app/verify/receipt/$id': typeof AppVerifyReceiptRoute
+  '/app/safety': typeof AppSafetyRouteWithChildren
+  '/app/verify': typeof AppVerifyRouteWithChildren
   '/app/': typeof AppIndexRoute
+  '/app/safety/police': typeof AppSafetyPoliceRouteWithChildren
+  '/app/safety/sos': typeof AppSafetySosRoute
+  '/app/verify/scan': typeof AppVerifyScanRoute
+  '/app/safety/': typeof AppSafetyIndexRoute
+  '/app/verify/': typeof AppVerifyIndexRoute
+  '/app/safety/police/$id': typeof AppSafetyPoliceIdRoute
+  '/app/verify/receipt/$id': typeof AppVerifyReceiptIdRoute
+  '/app/verify/session/$id': typeof AppVerifySessionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/official': typeof OfficialRoute
   '/app/activity': typeof AppActivityRoute
-  '/app/safety': typeof AppSafetyRoute
-  '/app/verify': typeof AppVerifyRoute
-  '/app/verify/': typeof AppVerifyIndexRoute
-  '/app/verify/scan': typeof AppVerifyScanRoute
-  '/app/verify/session/$id': typeof AppVerifySessionRoute
-  '/app/verify/receipt/$id': typeof AppVerifyReceiptRoute
   '/app': typeof AppIndexRoute
+  '/app/safety/police': typeof AppSafetyPoliceRouteWithChildren
+  '/app/safety/sos': typeof AppSafetySosRoute
+  '/app/verify/scan': typeof AppVerifyScanRoute
+  '/app/safety': typeof AppSafetyIndexRoute
+  '/app/verify': typeof AppVerifyIndexRoute
+  '/app/safety/police/$id': typeof AppSafetyPoliceIdRoute
+  '/app/verify/receipt/$id': typeof AppVerifyReceiptIdRoute
+  '/app/verify/session/$id': typeof AppVerifySessionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -108,13 +138,17 @@ export interface FileRoutesById {
   '/app': typeof AppRouteWithChildren
   '/official': typeof OfficialRoute
   '/app/activity': typeof AppActivityRoute
-  '/app/safety': typeof AppSafetyRoute
-  '/app/verify': typeof AppVerifyRoute
-  '/app/verify/': typeof AppVerifyIndexRoute
-  '/app/verify/scan': typeof AppVerifyScanRoute
-  '/app/verify/session/$id': typeof AppVerifySessionRoute
-  '/app/verify/receipt/$id': typeof AppVerifyReceiptRoute
+  '/app/safety': typeof AppSafetyRouteWithChildren
+  '/app/verify': typeof AppVerifyRouteWithChildren
   '/app/': typeof AppIndexRoute
+  '/app/safety/police': typeof AppSafetyPoliceRouteWithChildren
+  '/app/safety/sos': typeof AppSafetySosRoute
+  '/app/verify/scan': typeof AppVerifyScanRoute
+  '/app/safety/': typeof AppSafetyIndexRoute
+  '/app/verify/': typeof AppVerifyIndexRoute
+  '/app/safety/police/$id': typeof AppSafetyPoliceIdRoute
+  '/app/verify/receipt/$id': typeof AppVerifyReceiptIdRoute
+  '/app/verify/session/$id': typeof AppVerifySessionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -125,23 +159,29 @@ export interface FileRouteTypes {
     | '/app/activity'
     | '/app/safety'
     | '/app/verify'
-    | '/app/verify/'
-    | '/app/verify/scan'
-    | '/app/verify/session/$id'
-    | '/app/verify/receipt/$id'
     | '/app/'
+    | '/app/safety/police'
+    | '/app/safety/sos'
+    | '/app/verify/scan'
+    | '/app/safety/'
+    | '/app/verify/'
+    | '/app/safety/police/$id'
+    | '/app/verify/receipt/$id'
+    | '/app/verify/session/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/official'
     | '/app/activity'
+    | '/app'
+    | '/app/safety/police'
+    | '/app/safety/sos'
+    | '/app/verify/scan'
     | '/app/safety'
     | '/app/verify'
-    | '/app/verify/'
-    | '/app/verify/scan'
-    | '/app/verify/session/$id'
+    | '/app/safety/police/$id'
     | '/app/verify/receipt/$id'
-    | '/app'
+    | '/app/verify/session/$id'
   id:
     | '__root__'
     | '/'
@@ -150,11 +190,15 @@ export interface FileRouteTypes {
     | '/app/activity'
     | '/app/safety'
     | '/app/verify'
-    | '/app/verify/'
-    | '/app/verify/scan'
-    | '/app/verify/session/$id'
-    | '/app/verify/receipt/$id'
     | '/app/'
+    | '/app/safety/police'
+    | '/app/safety/sos'
+    | '/app/verify/scan'
+    | '/app/safety/'
+    | '/app/verify/'
+    | '/app/safety/police/$id'
+    | '/app/verify/receipt/$id'
+    | '/app/verify/session/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -214,6 +258,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppVerifyRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/safety/': {
+      id: '/app/safety/'
+      path: '/'
+      fullPath: '/app/safety/'
+      preLoaderRoute: typeof AppSafetyIndexRouteImport
+      parentRoute: typeof AppSafetyRoute
+    }
+    '/app/safety/police': {
+      id: '/app/safety/police'
+      path: '/police'
+      fullPath: '/app/safety/police'
+      preLoaderRoute: typeof AppSafetyPoliceRouteImport
+      parentRoute: typeof AppSafetyRoute
+    }
+    '/app/safety/sos': {
+      id: '/app/safety/sos'
+      path: '/sos'
+      fullPath: '/app/safety/sos'
+      preLoaderRoute: typeof AppSafetySosRouteImport
+      parentRoute: typeof AppSafetyRoute
+    }
     '/app/verify/': {
       id: '/app/verify/'
       path: '/'
@@ -228,48 +293,87 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppVerifyScanRouteImport
       parentRoute: typeof AppVerifyRoute
     }
-    '/app/verify/session/$id': {
-      id: '/app/verify/session/$id'
-      path: '/session/$id'
-      fullPath: '/app/verify/session/$id'
-      preLoaderRoute: typeof AppVerifySessionRouteImport
-      parentRoute: typeof AppVerifyRoute
+    '/app/safety/police/$id': {
+      id: '/app/safety/police/$id'
+      path: '/$id'
+      fullPath: '/app/safety/police/$id'
+      preLoaderRoute: typeof AppSafetyPoliceIdRouteImport
+      parentRoute: typeof AppSafetyPoliceRoute
     }
     '/app/verify/receipt/$id': {
       id: '/app/verify/receipt/$id'
       path: '/receipt/$id'
       fullPath: '/app/verify/receipt/$id'
-      preLoaderRoute: typeof AppVerifyReceiptRouteImport
+      preLoaderRoute: typeof AppVerifyReceiptIdRouteImport
+      parentRoute: typeof AppVerifyRoute
+    }
+    '/app/verify/session/$id': {
+      id: '/app/verify/session/$id'
+      path: '/session/$id'
+      fullPath: '/app/verify/session/$id'
+      preLoaderRoute: typeof AppVerifySessionIdRouteImport
       parentRoute: typeof AppVerifyRoute
     }
   }
 }
 
-interface AppRouteChildren {
-  AppActivityRoute: typeof AppActivityRoute
-  AppSafetyRoute: typeof AppSafetyRoute
-  AppVerifyRoute: typeof AppVerifyRoute
-  AppIndexRoute: typeof AppIndexRoute
+interface AppSafetyPoliceRouteChildren {
+  AppSafetyPoliceIdRoute: typeof AppSafetyPoliceIdRoute
 }
 
+const AppSafetyPoliceRouteChildren: AppSafetyPoliceRouteChildren = {
+  AppSafetyPoliceIdRoute: AppSafetyPoliceIdRoute,
+}
+
+const AppSafetyPoliceRouteWithChildren = AppSafetyPoliceRoute._addFileChildren(
+  AppSafetyPoliceRouteChildren,
+)
+
+interface AppSafetyRouteChildren {
+  AppSafetyPoliceRoute: typeof AppSafetyPoliceRouteWithChildren
+  AppSafetySosRoute: typeof AppSafetySosRoute
+  AppSafetyIndexRoute: typeof AppSafetyIndexRoute
+}
+
+const AppSafetyRouteChildren: AppSafetyRouteChildren = {
+  AppSafetyPoliceRoute: AppSafetyPoliceRouteWithChildren,
+  AppSafetySosRoute: AppSafetySosRoute,
+  AppSafetyIndexRoute: AppSafetyIndexRoute,
+}
+
+const AppSafetyRouteWithChildren = AppSafetyRoute._addFileChildren(
+  AppSafetyRouteChildren,
+)
+
 interface AppVerifyRouteChildren {
-  AppVerifyIndexRoute: typeof AppVerifyIndexRoute
   AppVerifyScanRoute: typeof AppVerifyScanRoute
-  AppVerifySessionRoute: typeof AppVerifySessionRoute
-  AppVerifyReceiptRoute: typeof AppVerifyReceiptRoute
+  AppVerifyIndexRoute: typeof AppVerifyIndexRoute
+  AppVerifyReceiptIdRoute: typeof AppVerifyReceiptIdRoute
+  AppVerifySessionIdRoute: typeof AppVerifySessionIdRoute
 }
 
 const AppVerifyRouteChildren: AppVerifyRouteChildren = {
-  AppVerifyIndexRoute,
-  AppVerifyScanRoute,
-  AppVerifySessionRoute,
-  AppVerifyReceiptRoute,
+  AppVerifyScanRoute: AppVerifyScanRoute,
+  AppVerifyIndexRoute: AppVerifyIndexRoute,
+  AppVerifyReceiptIdRoute: AppVerifyReceiptIdRoute,
+  AppVerifySessionIdRoute: AppVerifySessionIdRoute,
+}
+
+const AppVerifyRouteWithChildren = AppVerifyRoute._addFileChildren(
+  AppVerifyRouteChildren,
+)
+
+interface AppRouteChildren {
+  AppActivityRoute: typeof AppActivityRoute
+  AppSafetyRoute: typeof AppSafetyRouteWithChildren
+  AppVerifyRoute: typeof AppVerifyRouteWithChildren
+  AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppActivityRoute: AppActivityRoute,
-  AppSafetyRoute: AppSafetyRoute,
-  AppVerifyRoute: AppVerifyRoute._addFileChildren(AppVerifyRouteChildren),
+  AppSafetyRoute: AppSafetyRouteWithChildren,
+  AppVerifyRoute: AppVerifyRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
 }
 
