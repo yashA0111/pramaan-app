@@ -121,10 +121,10 @@ export class DemoAdminController {
 export class DemoAssetFilesController {
   constructor(private readonly storageService: StorageService) {}
 
-  @Get("files/:folder/:filename")
+  @Get("files/:officialId/:filename")
   @ApiOperation({ summary: "Serve public demo asset files (portraits, QRs)" })
-  async getPublicFile(
-    @Param("folder") folder: string,
+  async getOfficialAsset(
+    @Param("officialId") officialId: string,
     @Param("filename") filename: string,
     @Res() res: Response,
   ) {
@@ -132,10 +132,11 @@ export class DemoAssetFilesController {
       throw new ForbiddenException("Reference face images are protected biometric assets.");
     }
 
-    const storagePath = `${folder}/${filename}`;
+    const storagePath = `officials/${officialId}/${filename}`;
     try {
       const file = await this.storageService.getFile(storagePath);
       res.setHeader("Content-Type", file.mimeType);
+      res.setHeader("Cache-Control", "public, max-age=300");
       res.send(file.buffer);
     } catch {
       res.status(404).send("File not found");
