@@ -4,3 +4,18 @@ node_modules/
 .output/
 .wrangler/
 dist/
+
+# Agents & Skills
+.agents/
+skills/
+skills-lock.json
+
+# Markdown files except README and project documentation (docs/)
+*.md
+!README.md
+!readme.md
+!docs/**
+!docs/**/*.md
+!**/README.md
+!**/readme.md
+

@@ -1,0 +1,64 @@
+services:
+  # ----------------------------------------------------------------------------
+  # PostgreSQL (Optional local development database if not using Supabase)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: pramaan-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: pramaan
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # NestJS Authoritative API Service
+  # ----------------------------------------------------------------------------
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: pramaan-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/pramaan
+      DIRECT_DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/pramaan
+      SESSION_SECRET: pramaan-docker-dev-session-secret-min32chars
+      BIOMETRIC_SERVICE_URL: http://biometrics:8000
+      DEMO_ADMIN_EMAILS: admin@pramaan.dev,demo-admin@pramaan.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      biometrics:
+        condition: service_started
+
+  # ----------------------------------------------------------------------------
+  # Python FastAPI + ONNX Biometric Verification Microservice
+  # ----------------------------------------------------------------------------
+  biometrics:
+    build:
+      context: ./services/biometric
+      dockerfile: Dockerfile
+    container_name: pramaan-biometrics
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+
+volumes:
+  pgdata:
+
