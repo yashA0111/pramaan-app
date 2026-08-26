@@ -27,6 +27,16 @@ async function bootstrap() {
   // Global prefix
   app.setGlobalPrefix("api/v1");
 
+  // Base API endpoint. Keep this outside Nest's controller routing so it
+  // resolves cleanly alongside the global prefix.
+  httpAdapter.get("/api/v1", (_req: any, res: any) =>
+    res.status(200).json({
+      ...rootHealthResponse,
+      api: "/api/v1",
+    }),
+  );
+  httpAdapter.head("/api/v1", (_req: any, res: any) => res.status(200).end());
+
   // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
