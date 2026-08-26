@@ -14,6 +14,16 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
+  const httpAdapter = app.getHttpAdapter().getInstance();
+  const rootHealthResponse = {
+    status: "ok",
+    service: "pramaan-api",
+    docs: "/api/v1/docs",
+    health: "/api/v1/health",
+  };
+  httpAdapter.get("/", (_req: any, res: any) => res.status(200).json(rootHealthResponse));
+  httpAdapter.head("/", (_req: any, res: any) => res.status(200).end());
+
   // Global prefix
   app.setGlobalPrefix("api/v1");
 
@@ -31,9 +41,7 @@ async function bootstrap() {
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, curl) or matched origins
       if (!origin) return callback(null, true);
-      const allowed = Array.isArray(config.corsOrigin)
-        ? config.corsOrigin
-        : [config.corsOrigin];
+      const allowed = Array.isArray(config.corsOrigin) ? config.corsOrigin : [config.corsOrigin];
       if (allowed.includes(origin) || allowed.includes("*") || origin.includes("localhost")) {
         return callback(null, true);
       }
