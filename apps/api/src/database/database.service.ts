@@ -12,7 +12,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   public isConnected = false;
 
   async onModuleInit() {
-    await this.connect();
+    // Do not block HTTP startup on an optional development database.
+    void this.connect();
   }
 
   async connect(): Promise<boolean> {

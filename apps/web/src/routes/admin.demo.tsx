@@ -1,23 +1,32 @@
 import { ChangeEvent, FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  Archive,
   ArrowLeft,
   CheckCircle2,
-  ChevronRight,
+  Clock,
+  Copy,
+  CreditCard,
   FileImage,
   Fingerprint,
+  Info,
   MapPin,
   Plus,
   QrCode,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
+  Trash2,
   Upload,
   UserPlus,
   Users,
   X,
 } from "lucide-react";
+import QRCode from "qrcode";
 
 import { API_BASE_URL } from "@/lib/api/client";
+import { demoAuthHeaders } from "@/lib/demo-auth";
+import { formatPermanentCredentialUri } from "@/features/verification/qr";
 
 export const Route = createFileRoute("/admin/demo")({
   head: () => ({
@@ -25,15 +34,29 @@ export const Route = createFileRoute("/admin/demo")({
       { title: "Demo Admin — Pramaan" },
       {
         name: "description",
-        content: "Manage synthetic Pramaan officials, credential QR codes, portraits, and biometric reference faces.",
+        content: "Manage synthetic Pramaan officials, server-generated QR presentations, and biometric reference faces.",
       },
     ],
   }),
   component: DemoAdminPage,
 });
 
-type CredentialStatus = "valid" | "invalid" | "expired" | "revoked";
-type AssetType = "portrait" | "qr" | "reference_face";
+type CredentialStatus = "valid" | "invalid" | "expired" | "revoked" | "suspended" | "archived";
+type AssetType = "portrait" | "reference_face";
+
+type QrPresentationSummary = {
+  id: string;
+  credentialId: string;
+  credentialReference: string;
+  officialId: string;
+  status: "active" | "expired" | "invalidated" | "revoked";
+  expiresAt: string;
+  invalidatedAt?: string | null;
+  invalidatedReason?: string | null;
+  createdAt: string;
+  qrUri?: string;
+  qrDataUrl?: string;
+};
 
 type Official = {
   id: string;
@@ -53,11 +76,14 @@ type Official = {
     issuedAt: string;
     expiresAt: string;
   } | null;
+  /** Stable permanent credential QR for physical ID card */
+  permanentQr?: { uri: string; qrDataUrl: string } | null;
+  activePresentation?: QrPresentationSummary | null;
 };
 
 type Asset = {
   id: string;
-  assetType: AssetType;
+  assetType: "portrait" | "qr" | "reference_face";
   storagePath: string;
   mimeType: string;
   fileSize: number;
@@ -73,12 +99,7 @@ type FileSelection = {
   previewUrl: string;
 };
 
-const ADMIN_HEADERS: Record<string, string> = {
-  "x-user-id": "usr_admin_001",
-  "x-demo-role": "demo_admin",
-  "x-user-email": "admin@pramaan.dev",
-  "x-user-name": "Pramaan Demo Admin",
-};
+const adminHeaders = () => demoAuthHeaders();
 
 function DemoAdminPage() {
   const [officials, setOfficials] = useState<Official[]>([]);
@@ -88,6 +109,7 @@ function DemoAdminPage() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<AssetType | null>(null);
+  const [qrActionLoading, setQrActionLoading] = useState(false);
   const [notice, setNotice] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [formOpen, setFormOpen] = useState(true);
 
@@ -99,10 +121,10 @@ function DemoAdminPage() {
     postingLocation: "",
     credentialReference: "PRM-DEMO-0010",
     employeeReference: "",
+    initialQrTtlMinutes: 15,
   });
 
   const [portrait, setPortrait] = useState<FileSelection | null>(null);
-  const [qr, setQr] = useState<FileSelection | null>(null);
   const [referenceFace, setReferenceFace] = useState<FileSelection | null>(null);
 
   const selected = useMemo(
@@ -116,7 +138,7 @@ function DemoAdminPage() {
 
     try {
       const response = await fetch(`${API_BASE_URL}/admin/demo/officials`, {
-        headers: ADMIN_HEADERS,
+        headers: adminHeaders(),
       });
       if (!response.ok) throw new Error(await readError(response));
 
@@ -140,10 +162,11 @@ function DemoAdminPage() {
     setDetailsLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/admin/demo/officials/${id}`, {
-        headers: ADMIN_HEADERS,
+        headers: adminHeaders(),
       });
       if (!response.ok) throw new Error(await readError(response));
-      setSelectedDetails((await response.json()) as OfficialDetails);
+      const details = (await response.json()) as OfficialDetails;
+      setSelectedDetails(details);
     } catch (error) {
       setSelectedDetails(null);
       setNotice({
@@ -166,11 +189,11 @@ function DemoAdminPage() {
 
   useEffect(() => {
     return () => {
-      [portrait?.previewUrl, qr?.previewUrl, referenceFace?.previewUrl].forEach((url) => {
+      [portrait?.previewUrl, referenceFace?.previewUrl].forEach((url) => {
         if (url) URL.revokeObjectURL(url);
       });
     };
-  }, [portrait?.previewUrl, qr?.previewUrl, referenceFace?.previewUrl]);
+  }, [portrait?.previewUrl, referenceFace?.previewUrl]);
 
   async function createOfficial(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -180,7 +203,7 @@ function DemoAdminPage() {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/demo/officials`, {
         method: "POST",
-        headers: { ...ADMIN_HEADERS, "Content-Type": "application/json" },
+        headers: { ...adminHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       if (!response.ok) throw new Error(await readError(response));
@@ -188,7 +211,6 @@ function DemoAdminPage() {
       const created = (await response.json()) as Official;
       const files: Array<[AssetType, FileSelection | null]> = [
         ["portrait", portrait],
-        ["qr", qr],
         ["reference_face", referenceFace],
       ];
 
@@ -211,9 +233,9 @@ function DemoAdminPage() {
         postingLocation: "",
         credentialReference: nextCredentialReference(form.credentialReference),
         employeeReference: "",
+        initialQrTtlMinutes: 15,
       });
       clearSelection("portrait");
-      clearSelection("qr");
       clearSelection("reference_face");
       await loadOfficials({ quiet: true });
       await loadSelectedDetails(created.id);
@@ -223,7 +245,7 @@ function DemoAdminPage() {
         kind: failures.length ? "error" : "success",
         text: failures.length
           ? `${created.displayName} was created, but some evidence uploads failed: ${failures.join("; ")}`
-          : `${created.displayName} was created with ${files.filter(([, file]) => file).length} evidence asset${files.filter(([, file]) => file).length === 1 ? "" : "s"}.`,
+          : `${created.displayName} was created with an active server-generated QR presentation.`,
       });
     } catch (error) {
       setNotice({
@@ -241,8 +263,8 @@ function DemoAdminPage() {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/demo/officials/${id}/status`, {
         method: "PATCH",
-        headers: { ...ADMIN_HEADERS, "Content-Type": "application/json" },
-        body: JSON.stringify({ status, reason: "Updated from Pramaan Demo Admin" }),
+        headers: { ...adminHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ status, reason: `Status changed to ${status} from Pramaan Demo Admin` }),
       });
       if (!response.ok) throw new Error(await readError(response));
 
@@ -257,283 +279,298 @@ function DemoAdminPage() {
     }
   }
 
-  async function uploadAsset(id: string, assetType: AssetType, event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    setUploading(assetType);
+  async function handleRegenerateQr(id: string) {
+    setQrActionLoading(true);
     setNotice(null);
-
     try {
-      await uploadAssetFile(id, assetType, file);
-      setNotice({ kind: "success", text: `${labelForAsset(assetType)} uploaded successfully.` });
+      const response = await fetch(`${API_BASE_URL}/admin/demo/officials/${id}/qr/regenerate`, {
+        method: "POST",
+        headers: { ...adminHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ ttlMinutes: 15 }),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      setNotice({ kind: "success", text: "New temporary QR presentation generated. Previous presentation invalidated." });
       await loadOfficials({ quiet: true });
       await loadSelectedDetails(id);
     } catch (error) {
       setNotice({
         kind: "error",
-        text: error instanceof Error ? error.message : "Could not upload asset.",
+        text: error instanceof Error ? error.message : "Failed to regenerate QR presentation.",
       });
     } finally {
-      setUploading(null);
+      setQrActionLoading(false);
     }
   }
 
-  async function uploadAssetFile(id: string, assetType: AssetType, file: File) {
-    const body = new FormData();
-    body.append("file", file);
-    body.append("assetType", assetType);
+  async function handleExpireQr(id: string) {
+    setQrActionLoading(true);
+    setNotice(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/demo/officials/${id}/qr/expire`, {
+        method: "POST",
+        headers: { ...adminHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Manually expired by demo operator" }),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      setNotice({ kind: "success", text: "Active QR presentation expired now." });
+      await loadOfficials({ quiet: true });
+      await loadSelectedDetails(id);
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Failed to expire QR presentation.",
+      });
+    } finally {
+      setQrActionLoading(false);
+    }
+  }
 
-    const response = await fetch(`${API_BASE_URL}/admin/demo/officials/${id}/assets`, {
+  async function handleArchiveOfficial(id: string) {
+    if (!confirm("Are you sure you want to archive this official? They will be removed from the active demo registry, but historical verification records and receipts will be preserved.")) {
+      return;
+    }
+
+    setNotice(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/demo/officials/${id}`, {
+        method: "DELETE",
+        headers: adminHeaders(),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      setNotice({ kind: "success", text: "Official archived from active registry. History preserved." });
+      await loadOfficials();
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Failed to archive official.",
+      });
+    }
+  }
+
+  async function uploadAssetFile(officialId: string, assetType: AssetType, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("assetType", assetType);
+
+    const response = await fetch(`${API_BASE_URL}/admin/demo/officials/${officialId}/assets`, {
       method: "POST",
-      headers: ADMIN_HEADERS,
-      body,
+      headers: adminHeaders(),
+      body: formData,
     });
     if (!response.ok) throw new Error(await readError(response));
   }
 
+  async function handleExistingUpload(assetType: AssetType, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !selected) return;
+
+    setUploading(assetType);
+    setNotice(null);
+    try {
+      await uploadAssetFile(selected.id, assetType, file);
+      setNotice({ kind: "success", text: `${labelForAsset(assetType)} uploaded successfully.` });
+      await loadOfficials({ quiet: true });
+      await loadSelectedDetails(selected.id);
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text: error instanceof Error ? error.message : `Could not upload ${labelForAsset(assetType)}.`,
+      });
+    } finally {
+      setUploading(null);
+      event.target.value = "";
+    }
+  }
+
   function selectFile(assetType: AssetType, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    event.target.value = "";
     if (!file) return;
 
-    const selection = { file, previewUrl: URL.createObjectURL(file) };
+    const selection: FileSelection = {
+      file,
+      previewUrl: URL.createObjectURL(file),
+    };
+
     if (assetType === "portrait") {
-      if (portrait) URL.revokeObjectURL(portrait.previewUrl);
+      if (portrait?.previewUrl) URL.revokeObjectURL(portrait.previewUrl);
       setPortrait(selection);
-    } else if (assetType === "qr") {
-      if (qr) URL.revokeObjectURL(qr.previewUrl);
-      setQr(selection);
     } else {
-      if (referenceFace) URL.revokeObjectURL(referenceFace.previewUrl);
+      if (referenceFace?.previewUrl) URL.revokeObjectURL(referenceFace.previewUrl);
       setReferenceFace(selection);
     }
   }
 
   function clearSelection(assetType: AssetType) {
     if (assetType === "portrait") {
-      if (portrait) URL.revokeObjectURL(portrait.previewUrl);
+      if (portrait?.previewUrl) URL.revokeObjectURL(portrait.previewUrl);
       setPortrait(null);
-    } else if (assetType === "qr") {
-      if (qr) URL.revokeObjectURL(qr.previewUrl);
-      setQr(null);
     } else {
-      if (referenceFace) URL.revokeObjectURL(referenceFace.previewUrl);
+      if (referenceFace?.previewUrl) URL.revokeObjectURL(referenceFace.previewUrl);
       setReferenceFace(null);
     }
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-surface/85 backdrop-blur">
-        <div className="mx-auto max-w-[1400px] px-4 py-4 md:px-8">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="border-b border-border bg-surface">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3">
             <Link
-              to="/"
-              className="group inline-flex items-center gap-2 text-body-sm font-medium text-foreground-muted transition-colors hover:text-foreground"
+              to="/app/verify"
+              className="inline-flex size-9 items-center justify-center border border-border bg-surface text-foreground-muted hover:bg-muted hover:text-foreground"
+              aria-label="Back to verification"
             >
-              <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" aria-hidden="true" />
-              Back to Pramaan
+              <ArrowLeft className="size-4" aria-hidden="true" />
             </Link>
-
-            <div className="flex items-center gap-2 rounded-md border border-border bg-surface-strong px-3 py-2 text-metadata text-foreground-muted">
-              <ShieldCheck className="size-4 text-success" aria-hidden="true" />
-              Synthetic data only
+            <div>
+              <p className="text-label uppercase tracking-widest text-foreground-subtle">Pramaan Operations</p>
+              <h1 className="font-display text-section-title font-semibold text-foreground">Demo Admin & Credentials</h1>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => loadOfficials()}
+              disabled={loading}
+              className="inline-flex min-h-10 items-center gap-2 border border-border bg-surface px-3.5 text-body-sm font-semibold text-foreground hover:bg-muted"
+            >
+              <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormOpen((open) => !open)}
+              className="inline-flex min-h-10 items-center gap-2 bg-accent px-4 text-body-sm font-semibold text-accent-foreground hover:bg-accent-strong"
+            >
+              <UserPlus className="size-4" aria-hidden="true" />
+              {formOpen ? "Close form" : "Create official"}
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1400px] px-4 pb-16 pt-7 md:px-8 md:pt-9">
-        <section className="border-b border-border pb-7">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <p className="text-label uppercase text-accent">Pramaan · Demo Operations</p>
-              <h1 className="mt-2 font-display text-hero text-foreground">Credential registry</h1>
-              <p className="mt-3 max-w-2xl text-body text-foreground-muted">
-                Prepare the synthetic identity, credential QR, portrait, and biometric reference used in the verification demonstration.
-              </p>
+      {notice && (
+        <div className={`border-b px-4 py-3 text-body-sm sm:px-6 lg:px-8 ${notice.kind === "success" ? "border-success/30 bg-success-soft text-success-soft-foreground" : "border-danger/30 bg-danger-soft text-danger-soft-foreground"}`}>
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+            <p className="flex items-center gap-2">
+              <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+              {notice.text}
+            </p>
+            <button type="button" onClick={() => setNotice(null)} className="p-1 hover:opacity-75" aria-label="Dismiss notice">
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <main className="mx-auto grid max-w-7xl gap-6 p-4 sm:p-6 lg:grid-cols-12 lg:p-8">
+        <section className="lg:col-span-4">
+          <div className="border border-border bg-surface">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3 sm:px-5">
+              <div className="flex items-center gap-2">
+                <Users className="size-4 text-foreground-muted" aria-hidden="true" />
+                <h2 className="font-display text-card-title text-foreground">Synthetic Officials</h2>
+              </div>
+              <span className="rounded-full bg-surface-muted px-2 py-0.5 text-metadata font-medium text-foreground-subtle">
+                {officials.length} registered
+              </span>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="border border-border bg-surface-strong px-4 py-3">
-                <p className="text-label uppercase text-foreground-subtle">Records</p>
-                <p className="mt-1 font-display text-section-title text-foreground">{officials.length}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void loadOfficials()}
-                className="inline-flex min-h-11 items-center gap-2 border border-border bg-surface-strong px-4 text-body-sm font-medium text-foreground transition-colors hover:bg-muted"
-              >
-                <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
-                Refresh
-              </button>
+            <div className="divide-y divide-border">
+              {officials.map((official) => {
+                const isSelected = official.id === (selected?.id ?? "");
+                const status = (official.credential?.status ?? "invalid") as CredentialStatus;
+
+                return (
+                  <button
+                    key={official.id}
+                    type="button"
+                    onClick={() => setSelectedId(official.id)}
+                    className={`flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors sm:px-5 ${isSelected ? "bg-muted/70" : "hover:bg-muted/40"}`}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Avatar name={official.displayName} photoUrl={official.credential?.photoUrl ?? null} />
+                      <div className="min-w-0">
+                        <p className="truncate text-body-sm font-semibold text-foreground">{official.displayName}</p>
+                        <p className="truncate text-metadata text-foreground-muted">{official.designation} · {official.department}</p>
+                        <p className="mt-0.5 font-mono text-[11px] text-foreground-subtle">{official.credential?.reference ?? "No credential"}</p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Status status={status} />
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </section>
 
-        {notice && (
-          <div
-            role="status"
-            className={`mt-5 flex items-start justify-between gap-4 border px-4 py-3 text-body-sm ${
-              notice.kind === "success"
-                ? "border-success/25 bg-success-soft text-success-soft-foreground"
-                : "border-danger/25 bg-danger-soft text-danger-soft-foreground"
-            }`}
-          >
-            <div className="flex min-w-0 items-start gap-2.5">
-              {notice.kind === "success" ? (
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              ) : (
-                <X className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              )}
-              <span>{notice.text}</span>
-            </div>
-            <button type="button" onClick={() => setNotice(null)} className="shrink-0 rounded p-0.5 opacity-70 hover:opacity-100" aria-label="Dismiss notification">
-              <X className="size-4" aria-hidden="true" />
-            </button>
-          </div>
-        )}
-
-        <div className="mt-7 grid gap-6 xl:grid-cols-[minmax(320px,0.82fr)_minmax(520px,1.18fr)]">
-          <section className="border border-border bg-surface-strong shadow-elev-1">
-            <div className="flex items-center justify-between border-b border-border px-5 py-4 md:px-6">
-              <div>
-                <p className="text-label uppercase text-foreground-subtle">Registry</p>
-                <h2 className="mt-1 font-display text-section-title text-foreground">Synthetic officials</h2>
-              </div>
-              <span className="font-display text-metadata text-foreground-subtle">{officials.length.toString().padStart(2, "0")}</span>
-            </div>
-
-            <div className="max-h-[680px] overflow-y-auto p-2">
-              {loading && (
-                <div className="space-y-2 p-2">
-                  {[1, 2, 3].map((item) => <div key={item} className="h-24 animate-pulse border border-border bg-surface" />)}
+        <section className="lg:col-span-8">
+          {formOpen && (
+            <div className="mb-6 border border-border bg-surface p-5 md:p-6">
+              <div className="flex items-center justify-between border-b border-border pb-4">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="size-5 text-accent" aria-hidden="true" />
+                  <h2 className="font-display text-card-title text-foreground">Create Synthetic Official</h2>
                 </div>
-              )}
+                <button type="button" onClick={() => setFormOpen(false)} className="text-foreground-subtle hover:text-foreground">
+                  <X className="size-5" aria-hidden="true" />
+                </button>
+              </div>
 
-              {!loading && officials.length === 0 && (
-                <div className="px-6 py-16 text-center">
-                  <Users className="mx-auto size-8 text-foreground-subtle" aria-hidden="true" />
-                  <h3 className="mt-4 font-display text-card-title text-foreground">Registry is empty</h3>
-                  <p className="mx-auto mt-2 max-w-xs text-body-sm text-foreground-muted">Create the first synthetic official to begin a verification scenario.</p>
-                  <button type="button" onClick={() => setFormOpen(true)} className="mt-5 inline-flex min-h-10 items-center gap-2 border border-border bg-surface px-4 text-body-sm font-semibold text-foreground hover:bg-muted">
-                    <Plus className="size-4" aria-hidden="true" /> Add official
+              <form onSubmit={createOfficial} className="mt-5 space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Full Name" value={form.displayName} onChange={(v) => setForm((f) => ({ ...f, displayName: v }))} placeholder="e.g. Inspector Deepak Sharma" required />
+                  <Field label="Registered Email" value={form.registeredEmail} onChange={(v) => setForm((f) => ({ ...f, registeredEmail: v }))} placeholder="deepak.sharma@delhipolice.gov.in" type="email" required />
+                  <Field label="Designation" value={form.designation} onChange={(v) => setForm((f) => ({ ...f, designation: v }))} placeholder="Inspector" required />
+                  <Field label="Department" value={form.department} onChange={(v) => setForm((f) => ({ ...f, department: v }))} placeholder="Anti-Corruption Branch" required />
+                  <Field label="Posting Location" value={form.postingLocation} onChange={(v) => setForm((f) => ({ ...f, postingLocation: v }))} placeholder="HQ Unit VIII, New Delhi" required />
+                  <Field label="Credential Reference" value={form.credentialReference} onChange={(v) => setForm((f) => ({ ...f, credentialReference: v }))} placeholder="PRM-DEMO-0010" required />
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-label uppercase text-foreground-subtle">Initial Biometric & Evidence Assets</p>
+                  <p className="mt-1 text-metadata text-foreground-muted">QR code will be generated automatically by the server.</p>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <CreateAssetPicker icon={<FileImage className="size-5" />} label="Portrait Photo" description="Official ID card portrait" selection={portrait} onSelect={(e) => selectFile("portrait", e)} onClear={() => clearSelection("portrait")} />
+                    <CreateAssetPicker icon={<Fingerprint className="size-5" />} label="Reference Face (Protected)" description="Enrolled biometric template input" selection={referenceFace} onSelect={(e) => selectFile("reference_face", e)} onClear={() => clearSelection("reference_face")} />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button type="button" onClick={() => setFormOpen(false)} className="min-h-10 border border-border bg-surface px-4 text-body-sm font-semibold text-foreground hover:bg-muted">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={saving} className="min-h-10 bg-accent px-5 text-body-sm font-semibold text-accent-foreground hover:bg-accent-strong disabled:opacity-50">
+                    {saving ? "Creating…" : "Save and Generate QR"}
                   </button>
                 </div>
-              )}
-
-              {!loading && officials.length > 0 && (
-                <div className="space-y-1">
-                  {officials.map((official) => (
-                    <button
-                      key={official.id}
-                      type="button"
-                      onClick={() => setSelectedId(official.id)}
-                      className={`group w-full border p-4 text-left transition-all ${
-                        selected?.id === official.id ? "border-accent bg-accent-soft/35 shadow-elev-1" : "border-transparent bg-surface hover:border-border hover:bg-muted/70"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Avatar name={official.displayName} photoUrl={official.credential?.photoUrl} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="truncate font-display text-body-sm font-semibold text-foreground">{official.displayName}</p>
-                            {official.credential && <Status status={official.credential.status} />}
-                          </div>
-                          <p className="mt-1 truncate text-metadata text-foreground-muted">{official.designation} · {official.department}</p>
-                          <p className="mt-1 font-mono text-[10px] tracking-[0.08em] text-foreground-subtle">{official.credential?.reference ?? "NO CREDENTIAL"}</p>
-                        </div>
-                        <ChevronRight className={`size-4 shrink-0 ${selected?.id === official.id ? "text-accent" : "text-foreground-subtle group-hover:translate-x-0.5"}`} aria-hidden="true" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+              </form>
             </div>
-          </section>
+          )}
 
-          <section className="border border-border bg-surface-strong shadow-elev-1">
+          <div className="border border-border bg-surface">
             {selected ? (
               <CredentialWorkspace
                 official={selected}
                 details={selectedDetails}
                 detailsLoading={detailsLoading}
                 uploading={uploading}
-                onStatusChange={(status) => void updateStatus(selected.id, status)}
-                onUpload={(assetType, event) => void uploadAsset(selected.id, assetType, event)}
+                qrActionLoading={qrActionLoading}
+                onStatusChange={(status) => updateStatus(selected.id, status)}
+                onRegenerateQr={() => handleRegenerateQr(selected.id)}
+                onExpireQr={() => handleExpireQr(selected.id)}
+                onArchive={() => handleArchiveOfficial(selected.id)}
+                onUpload={handleExistingUpload}
                 onAddNew={() => setFormOpen(true)}
               />
             ) : (
               <EmptyWorkspace onAddNew={() => setFormOpen(true)} />
             )}
-          </section>
-        </div>
-
-        <section className="mt-6 border border-border bg-background">
-          <button
-            type="button"
-            onClick={() => setFormOpen((open) => !open)}
-            className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left md:px-6"
-            aria-expanded={formOpen}
-          >
-            <div className="flex items-center gap-3">
-              <span className="flex size-9 items-center justify-center border border-accent/25 bg-accent-soft text-accent-soft-foreground"><Plus className="size-4" aria-hidden="true" /></span>
-              <div>
-                <p className="text-label uppercase text-foreground-subtle">Creation</p>
-                <h2 className="mt-0.5 font-display text-card-title text-foreground">Create a complete demo credential</h2>
-              </div>
-            </div>
-            <ChevronRight className={`size-4 text-foreground-subtle transition-transform ${formOpen ? "rotate-90" : ""}`} aria-hidden="true" />
-          </button>
-
-          {formOpen && (
-            <form onSubmit={createOfficial} className="border-t border-border px-5 py-6 md:px-6 md:py-7">
-              <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.9fr)]">
-                <div className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Display name" value={form.displayName} onChange={(value) => setForm({ ...form, displayName: value })} placeholder="Deepak Sharma" required />
-                    <Field label="Registered email" type="email" value={form.registeredEmail} onChange={(value) => setForm({ ...form, registeredEmail: value })} placeholder="deepak.sharma@example.com" required />
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Designation" value={form.designation} onChange={(value) => setForm({ ...form, designation: value })} placeholder="Inspector" required />
-                    <Field label="Department" value={form.department} onChange={(value) => setForm({ ...form, department: value })} placeholder="Traffic Management Division" required />
-                  </div>
-                  <Field label="Posting location" value={form.postingLocation} onChange={(value) => setForm({ ...form, postingLocation: value })} placeholder="District Unit VII, New Delhi" required />
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Credential reference" value={form.credentialReference} onChange={(value) => setForm({ ...form, credentialReference: value.toUpperCase() })} placeholder="PRM-DEMO-0010" required />
-                    <Field label="Employee reference" value={form.employeeReference} onChange={(value) => setForm({ ...form, employeeReference: value })} placeholder="EMP-DP-99881" />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-label uppercase text-foreground-subtle">Evidence assets</p>
-                      <h3 className="mt-1 font-display text-card-title text-foreground">Add everything now</h3>
-                    </div>
-                    <span className="font-mono text-[10px] text-foreground-subtle">OPTIONAL</span>
-                  </div>
-                  <p className="mt-2 text-body-sm text-foreground-muted">The credential is created first, then the selected files are attached automatically.</p>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <CreateAssetPicker icon={<FileImage className="size-5" />} label="Portrait" description="Visible credential photo" selection={portrait} onSelect={(event) => selectFile("portrait", event)} onClear={() => clearSelection("portrait")} />
-                    <CreateAssetPicker icon={<QrCode className="size-5" />} label="QR code" description="Pramaan verification QR" selection={qr} onSelect={(event) => selectFile("qr", event)} onClear={() => clearSelection("qr")} />
-                    <CreateAssetPicker icon={<Fingerprint className="size-5" />} label="Reference face" description="Biometric comparison reference" selection={referenceFace} onSelect={(event) => selectFile("reference_face", event)} onClear={() => clearSelection("reference_face")} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
-                <p className="max-w-2xl text-metadata text-foreground-subtle">Reference-face files are protected biometric assets. They are stored for the identity verification adapter and are not served by the public asset route.</p>
-                <button type="submit" disabled={saving} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-accent px-5 text-body-sm font-semibold text-accent-foreground hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60">
-                  <UserPlus className="size-4" aria-hidden="true" />
-                  {saving ? "Creating credential…" : "Create credential"}
-                </button>
-              </div>
-            </form>
-          )}
+          </div>
         </section>
       </main>
     </div>
@@ -545,7 +582,11 @@ function CredentialWorkspace({
   details,
   detailsLoading,
   uploading,
+  qrActionLoading,
   onStatusChange,
+  onRegenerateQr,
+  onExpireQr,
+  onArchive,
   onUpload,
   onAddNew,
 }: {
@@ -553,20 +594,89 @@ function CredentialWorkspace({
   details: OfficialDetails | null;
   detailsLoading: boolean;
   uploading: AssetType | null;
+  qrActionLoading: boolean;
   onStatusChange: (status: CredentialStatus) => void;
+  onRegenerateQr: () => void;
+  onExpireQr: () => void;
+  onArchive: () => void;
   onUpload: (assetType: AssetType, event: ChangeEvent<HTMLInputElement>) => void;
   onAddNew: () => void;
 }) {
   const credential = official.credential;
   const portraitAsset = details?.assets?.find((asset) => asset.assetType === "portrait");
-  const qrAsset = details?.assets?.find((asset) => asset.assetType === "qr");
   const referenceAsset = details?.assets?.find((asset) => asset.assetType === "reference_face");
+  const activePres = details?.activePresentation || official.activePresentation;
+  const permanentQrData = (details as any)?.permanentQr || official.permanentQr;
+
+  // --- Permanent Credential QR state ---
+  const permanentUri = credential?.reference ? formatPermanentCredentialUri(credential.reference) : null;
+  const [permanentQrUrl, setPermanentQrUrl] = useState<string | null>(
+    permanentQrData?.qrDataUrl ?? null,
+  );
+
+  useEffect(() => {
+    if (permanentQrData?.qrDataUrl) {
+      setPermanentQrUrl(permanentQrData.qrDataUrl);
+      return;
+    }
+    if (!permanentUri) return;
+    let active = true;
+    QRCode.toDataURL(permanentUri, {
+      errorCorrectionLevel: "H",
+      margin: 2,
+      width: 360,
+      color: { dark: "#0F172A", light: "#FFFFFF" },
+    })
+      .then((url) => { if (active) setPermanentQrUrl(url); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [permanentUri, permanentQrData]);
+
+  // --- Ephemeral Presentation QR state ---
+  const [ephemeralQrUrl, setEphemeralQrUrl] = useState<string | null>(
+    activePres?.qrDataUrl ?? null,
+  );
+
+  useEffect(() => {
+    if (activePres?.qrDataUrl) {
+      setEphemeralQrUrl(activePres.qrDataUrl);
+      return;
+    }
+    if (!activePres?.qrUri) {
+      setEphemeralQrUrl(null);
+      return;
+    }
+    let active = true;
+    QRCode.toDataURL(activePres.qrUri, {
+      errorCorrectionLevel: "H",
+      margin: 2,
+      width: 360,
+      color: { dark: "#0F172A", light: "#FFFFFF" },
+    })
+      .then((url) => { if (active) setEphemeralQrUrl(url); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [activePres]);
+
+  const copyPermanentUri = () => {
+    if (permanentUri) {
+      navigator.clipboard.writeText(permanentUri);
+      alert("Permanent credential QR URI copied to clipboard!");
+    }
+  };
+
+  const copyEphemeralUri = () => {
+    if (activePres?.qrUri) {
+      navigator.clipboard.writeText(activePres.qrUri);
+      alert("Ephemeral presentation URI copied to clipboard!");
+    }
+  };
 
   return (
     <div>
       <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-5 md:px-6">
         <div className="flex min-w-0 items-center gap-4">
-          <Avatar name={official.displayName} photoUrl={credential?.photoUrl} large />
+          <Avatar name={official.displayName} photoUrl={credential?.photoUrl ?? null} large />
           <div className="min-w-0">
             <p className="text-label uppercase text-foreground-subtle">Selected official</p>
             <h2 className="mt-1 truncate font-display text-section-title text-foreground">{official.displayName}</h2>
@@ -587,58 +697,239 @@ function CredentialWorkspace({
             <InfoCell label="Registered email" value={official.registeredEmail} />
           </div>
 
+          {/* ── Panel A: Permanent Credential QR ── */}
+          <div className="border-t border-border p-5 md:p-6" style={{ background: "hsl(var(--surface-muted) / 0.2)" }}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-label uppercase tracking-wider text-foreground-subtle font-semibold flex items-center gap-1.5">
+                  <QrCode className="size-4" /> Permanent Credential QR
+                </p>
+                <h3 className="mt-1 font-display text-card-title text-foreground">Physical ID Card QR</h3>
+                <p className="mt-1 text-body-sm text-foreground-muted">
+                  Print this QR on the official's physical ID card. It encodes only the credential reference
+                  — no expiry, no secret. The backend controls verification access.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-success-soft-foreground">
+                <Info className="size-3" /> Permanent · No Expiry
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-6 md:grid-cols-12 items-center">
+              <div className="md:col-span-5 flex flex-col items-center">
+                <div className="p-4 bg-white border border-border rounded-xl shadow-sm inline-block">
+                  {permanentQrUrl ? (
+                    <img src={permanentQrUrl} alt={`Permanent credential QR for ${credential?.reference}`} className="size-56 object-contain" />
+                  ) : (
+                    <div className="size-56 flex items-center justify-center bg-muted text-foreground-subtle">
+                      <QrCode className="size-16 animate-pulse" />
+                    </div>
+                  )}
+                </div>
+                <p className="mt-2 font-mono text-[11px] text-foreground-subtle text-center break-all">
+                  {permanentUri}
+                </p>
+              </div>
+
+              <div className="md:col-span-7 space-y-3">
+                <div className="border border-border bg-surface p-4 rounded-lg space-y-2 text-body-sm">
+                  <div className="flex justify-between items-center text-metadata">
+                    <span className="text-foreground-subtle uppercase">Credential Ref</span>
+                    <span className="font-mono text-foreground font-medium">{credential?.reference}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-metadata">
+                    <span className="text-foreground-subtle uppercase">QR Scheme</span>
+                    <span className="text-foreground font-medium">pramaan://credential/</span>
+                  </div>
+                  <div className="flex justify-between items-center text-metadata">
+                    <span className="text-foreground-subtle uppercase">Expiry</span>
+                    <span className="text-foreground font-medium">Never — controlled by backend</span>
+                  </div>
+                  <div className="flex justify-between items-center text-metadata">
+                    <span className="text-foreground-subtle uppercase">Contains Secret</span>
+                    <span className="text-foreground font-medium">No — reference only</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={copyPermanentUri}
+                    className="inline-flex min-h-10 items-center gap-2 border border-border bg-surface px-3 text-body-sm font-medium text-foreground hover:bg-muted"
+                  >
+                    <Copy className="size-4" /> Copy URI
+                  </button>
+                  <Link
+                    to="/demo/id-card/$officialId"
+                    params={{ officialId: official.id }}
+                    className="inline-flex min-h-10 items-center gap-2 bg-primary px-3.5 text-body-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                  >
+                    <CreditCard className="size-4" /> Open ID Card
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Panel B: Ephemeral Verification Presentation ── */}
+          <div className="border-t border-border p-5 md:p-6 bg-surface-muted/30">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-label uppercase tracking-wider text-accent font-semibold flex items-center gap-1.5">
+                  <QrCode className="size-4" /> Active Verification Presentation
+                </p>
+                <h3 className="mt-1 font-display text-card-title text-foreground">Ephemeral Session Token</h3>
+                <p className="mt-1 text-body-sm text-foreground-muted">
+                  Short-lived, server-managed verification token. Regeneratable by admin. Does not affect the permanent ID card QR.
+                </p>
+              </div>
+
+              {activePres && (
+                <span className={`px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider rounded-full border ${activePres.status === "active" ? "bg-success-soft text-success-soft-foreground border-success/30" : "bg-danger-soft text-danger-soft-foreground border-danger/30"}`}>
+                  Presentation {activePres.status}
+                </span>
+              )}
+            </div>
+
+            <div className="mt-5 grid gap-6 md:grid-cols-12 items-center">
+              <div className="md:col-span-5 flex flex-col items-center">
+                <div className="p-4 bg-white border border-border rounded-xl shadow-sm inline-block">
+                  {ephemeralQrUrl ? (
+                    <img src={ephemeralQrUrl} alt="Active Ephemeral Verification Presentation" className="size-56 object-contain" />
+                  ) : (
+                    <div className="size-56 flex items-center justify-center bg-muted text-foreground-subtle">
+                      <QrCode className="size-16 opacity-40" />
+                    </div>
+                  )}
+                </div>
+                <p className="mt-2 font-mono text-[11px] text-foreground-subtle text-center">
+                  {activePres?.qrUri ?? "No active presentation"}
+                </p>
+              </div>
+
+              <div className="md:col-span-7 space-y-3">
+                <div className="border border-border bg-surface p-4 rounded-lg space-y-2 text-body-sm">
+                  <div className="flex justify-between items-center text-metadata">
+                    <span className="text-foreground-subtle uppercase">Presentation ID</span>
+                    <span className="font-mono text-foreground font-medium">{activePres?.id || "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-metadata">
+                    <span className="text-foreground-subtle uppercase">Security Type</span>
+                    <span className="text-foreground font-medium">Opaque Token (SHA-256 Hashed)</span>
+                  </div>
+                  <div className="flex justify-between items-center text-metadata">
+                    <span className="text-foreground-subtle uppercase">Expires At</span>
+                    <span className="font-mono text-foreground">{activePres?.expiresAt ? new Date(activePres.expiresAt).toLocaleTimeString() : "15 mins TTL"}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={onRegenerateQr}
+                    disabled={qrActionLoading}
+                    className="inline-flex min-h-10 items-center gap-2 bg-accent px-4 text-body-sm font-semibold text-accent-foreground hover:bg-accent-strong disabled:opacity-50"
+                  >
+                    <RefreshCw className={`size-4 ${qrActionLoading ? "animate-spin" : ""}`} />
+                    Regenerate Presentation
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onExpireQr}
+                    disabled={qrActionLoading || activePres?.status !== "active"}
+                    className="inline-flex min-h-10 items-center gap-2 border border-danger/40 bg-danger-soft px-3.5 text-body-sm font-semibold text-danger-soft-foreground hover:bg-danger-soft/80 disabled:opacity-50"
+                  >
+                    <Clock className="size-4" />
+                    Expire Now
+                  </button>
+                  {activePres?.qrUri && (
+                    <button
+                      type="button"
+                      onClick={copyEphemeralUri}
+                      className="inline-flex min-h-10 items-center gap-2 border border-border bg-surface px-3 text-body-sm font-medium text-foreground hover:bg-muted"
+                    >
+                      <Copy className="size-4" /> Copy URI
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Credential Status Control */}
           <div className="border-t border-border p-5 md:p-6">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-label uppercase text-foreground-subtle">Credential state</p>
-                <p className="mt-1 text-body-sm text-foreground-muted">Change the simulated registry status used during verification.</p>
+                <p className="mt-1 text-body-sm text-foreground-muted">Update authoritative registry status. Suspending or revoking invalidates active QR presentations.</p>
               </div>
               <Status status={credential.status} />
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {(["valid", "invalid", "expired", "revoked"] as CredentialStatus[]).map((status) => (
-                <button key={status} type="button" onClick={() => onStatusChange(status)} className={`min-h-10 border px-3 text-metadata font-semibold capitalize transition-colors ${credential.status === status ? "border-accent bg-accent-soft text-accent-soft-foreground" : "border-border bg-surface text-foreground-muted hover:bg-muted"}`}>
+              {(["valid", "suspended", "revoked", "expired"] as CredentialStatus[]).map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => onStatusChange(status)}
+                  className={`min-h-10 border px-3 text-metadata font-semibold capitalize transition-colors ${
+                    credential.status === status
+                      ? "border-accent bg-accent-soft text-accent-soft-foreground"
+                      : "border-border bg-surface text-foreground-muted hover:bg-muted"
+                  }`}
+                >
                   {status}
                 </button>
               ))}
             </div>
           </div>
 
+          {/* Evidence Assets */}
           <div className="border-t border-border p-5 md:p-6">
             <div>
-              <p className="text-label uppercase text-foreground-subtle">Evidence assets</p>
-              <h3 className="mt-1 font-display text-card-title text-foreground">Credential evidence</h3>
-              <p className="mt-1 text-body-sm text-foreground-muted">Portrait and QR are visible evidence. Reference face is the protected biometric input.</p>
+              <p className="text-label uppercase text-foreground-subtle">Biometric & Identity Assets</p>
+              <h3 className="mt-1 font-display text-card-title text-foreground">Enrolled Identity Media</h3>
+              <p className="mt-1 text-body-sm text-foreground-muted">Portrait is public evidence. Reference face is protected for 1:1 ONNX biometric comparison.</p>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
               <ExistingAsset
-                title="Portrait"
+                title="Portrait Photograph"
                 icon={<FileImage className="size-5" />}
-                asset={portraitAsset}
-                imageUrl={portraitAsset ? publicAssetUrl(portraitAsset.storagePath) : credential.photoUrl}
+                {...(portraitAsset ? { asset: portraitAsset } : {})}
+                imageUrl={portraitAsset ? publicAssetUrl(portraitAsset.storagePath) : credential.photoUrl ?? null}
                 onUpload={(event) => onUpload("portrait", event)}
                 uploading={uploading === "portrait"}
               />
-              <ExistingAsset
-                title="QR code"
-                icon={<QrCode className="size-5" />}
-                asset={qrAsset}
-                imageUrl={qrAsset ? publicAssetUrl(qrAsset.storagePath) : null}
-                onUpload={(event) => onUpload("qr", event)}
-                uploading={uploading === "qr"}
-                contain
-              />
               <ProtectedAsset
-                title="Reference face"
+                title="Enrolled Reference Face"
                 icon={<Fingerprint className="size-5" />}
-                asset={referenceAsset}
+                {...(referenceAsset ? { asset: referenceAsset } : {})}
                 onUpload={(event) => onUpload("reference_face", event)}
                 uploading={uploading === "reference_face"}
               />
             </div>
 
-            {detailsLoading && <p className="mt-4 text-metadata text-foreground-subtle">Refreshing evidence assets…</p>}
+            {detailsLoading && <p className="mt-4 text-metadata text-foreground-subtle">Refreshing assets…</p>}
+          </div>
+
+          {/* Danger Zone: Archival */}
+          <div className="border-t border-border p-5 md:p-6 bg-danger-soft/10">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h4 className="text-body-sm font-semibold text-danger flex items-center gap-1.5">
+                  <ShieldAlert className="size-4" /> Non-Destructive Archival
+                </h4>
+                <p className="mt-1 text-metadata text-foreground-muted">
+                  Deactivate official from the active demo registry. All historical verification sessions and trust receipts are permanently preserved.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onArchive}
+                className="inline-flex min-h-10 items-center gap-2 border border-danger/40 bg-surface px-4 text-body-sm font-semibold text-danger hover:bg-danger-soft/30"
+              >
+                <Archive className="size-4" /> Archive Official
+              </button>
+            </div>
           </div>
         </>
       ) : (
@@ -697,7 +988,7 @@ function ProtectedAsset({ title, icon, asset, onUpload, uploading }: { title: st
           <p className="mt-2 text-metadata text-foreground-muted">Biometric reference stored privately</p>
         </div>
       </div>
-      <p className="mt-2 text-metadata text-foreground-muted">{uploading ? "Uploading…" : asset ? "Reference face is attached" : "No reference face uploaded yet"}</p>
+      <p className="mt-2 text-metadata text-foreground-muted">{uploading ? "Uploading…" : asset ? "Reference face enrolled" : "No reference face enrolled yet"}</p>
       <input type="file" accept="image/*" className="sr-only" disabled={uploading} onChange={onUpload} />
     </label>
   );
@@ -708,7 +999,7 @@ function EmptyWorkspace({ onAddNew }: { onAddNew: () => void }) {
     <div className="flex min-h-[520px] flex-col items-center justify-center px-6 text-center">
       <Users className="size-10 text-foreground-subtle" aria-hidden="true" />
       <h2 className="mt-4 font-display text-section-title text-foreground">No credential selected</h2>
-      <p className="mt-2 max-w-sm text-body-sm text-foreground-muted">Create a synthetic credential and attach its evidence assets to begin a verification scenario.</p>
+      <p className="mt-2 max-w-sm text-body-sm text-foreground-muted">Create a synthetic credential to generate an ephemeral QR presentation.</p>
       <button type="button" onClick={onAddNew} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-md bg-accent px-4 text-body-sm font-semibold text-accent-foreground hover:bg-accent-strong">
         <Plus className="size-4" aria-hidden="true" /> Create credential
       </button>
@@ -733,7 +1024,7 @@ function CreateAssetPicker({ icon, label, description, selection, onSelect, onCl
     <label className="group relative block cursor-pointer overflow-hidden border border-dashed border-border-strong bg-surface p-3 transition-colors hover:border-accent hover:bg-accent-soft/20">
       {selection ? (
         <div className="aspect-[4/3] overflow-hidden border border-border bg-background">
-          <img src={selection.previewUrl} alt={`${label} preview`} className={`h-full w-full ${label === "QR code" ? "object-contain p-4" : "object-cover"}`} />
+          <img src={selection.previewUrl} alt={`${label} preview`} className="h-full w-full object-cover" />
         </div>
       ) : (
         <div className="flex aspect-[4/3] items-center justify-center border border-border bg-background text-foreground-subtle">{icon}</div>
@@ -774,7 +1065,10 @@ function Status({ status }: { status: CredentialStatus }) {
     invalid: "bg-danger-soft text-danger-soft-foreground border-danger/20",
     expired: "bg-warning-soft text-warning-soft-foreground border-warning/20",
     revoked: "bg-danger-soft text-danger-soft-foreground border-danger/20",
-  }[status];
+    suspended: "bg-warning-soft text-warning-soft-foreground border-warning/20",
+    archived: "bg-surface-muted text-foreground-subtle border-border",
+  }[status] || "bg-surface-muted text-foreground-subtle border-border";
+
   return <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${tone}`}>{status}</span>;
 }
 
@@ -805,22 +1099,25 @@ function Field({ label, value, onChange, placeholder, type = "text", required = 
 
 function labelForAsset(assetType: AssetType) {
   if (assetType === "reference_face") return "Reference face";
-  if (assetType === "qr") return "QR code";
   return "Portrait";
 }
 
 function publicAssetUrl(storagePath: string) {
   const segments = storagePath.split("/");
-  if (segments.length === 3 && segments[0] === "officials") {
-    return `${API_BASE_URL}/demo/assets/files/${encodeURIComponent(segments[1])}/${encodeURIComponent(segments[2])}`;
+  const officialId = segments[1];
+  const filename = segments[2];
+  if (segments.length === 3 && segments[0] === "officials" && officialId && filename) {
+    return `${API_BASE_URL}/demo/assets/files/${encodeURIComponent(officialId)}/${encodeURIComponent(filename)}`;
   }
   return null;
 }
 
 function nextCredentialReference(current: string) {
   const match = current.match(/^(PRM-[A-Z0-9]+-)(\d{4})$/i);
-  if (!match) return "PRM-DEMO-0010";
-  return `${match[1].toUpperCase()}${String(Number(match[2]) + 1).padStart(4, "0")}`;
+  const prefix = match?.[1];
+  const number = match?.[2];
+  if (!prefix || !number) return "PRM-DEMO-0010";
+  return `${prefix.toUpperCase()}${String(Number(number) + 1).padStart(4, "0")}`;
 }
 
 function initialsFor(name: string) {

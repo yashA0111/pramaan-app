@@ -6,6 +6,7 @@ import {
   VerificationSession,
   VerificationStatus,
 } from "./verification.types";
+import { TrustReceiptCrypto } from "./verification.receipt";
 
 export class VerificationPolicyEngine {
   static evaluateFinalReceipt(session: VerificationSession): TrustReceiptViewModel {
@@ -125,7 +126,8 @@ export class VerificationPolicyEngine {
       );
     }
 
-    return {
+    const receiptId = `rcpt_${session.sessionId.replace(/^ses_/, "")}`;
+    const unsignedReceipt = {
       sessionId: session.sessionId,
       credentialReference: session.credentialReference,
       subject: session.credential,
@@ -136,8 +138,10 @@ export class VerificationPolicyEngine {
       methods,
       occurredAt: session.confirmation.respondedAt ?? session.createdAt,
       limitations,
-      demo: true,
+      demo: session.demo ?? true,
     };
+
+    return TrustReceiptCrypto.signTrustReceipt(receiptId, unsignedReceipt);
   }
 
   private static createMethod(

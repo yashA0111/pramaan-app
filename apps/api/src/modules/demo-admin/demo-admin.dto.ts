@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsEmail, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsEmail, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class CreateDemoOfficialDto {
   @ApiProperty({ example: "Deepak Sharma" })
@@ -36,6 +36,13 @@ export class CreateDemoOfficialDto {
   @IsString()
   @IsOptional()
   employeeReference?: string;
+
+  @ApiProperty({ required: false, default: 15, example: 15 })
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  @IsOptional()
+  initialQrTtlMinutes?: number;
 }
 
 export class UpdateDemoOfficialDto {
@@ -59,19 +66,35 @@ export class UpdateDemoOfficialDto {
   @IsOptional()
   postingLocation?: string;
 
-  @ApiProperty({ required: false, enum: ["valid", "invalid", "expired", "revoked"] })
+  @ApiProperty({ required: false, enum: ["valid", "invalid", "expired", "revoked", "suspended", "archived"] })
   @IsString()
   @IsOptional()
-  credentialStatus?: "valid" | "invalid" | "expired" | "revoked";
+  credentialStatus?: "valid" | "invalid" | "expired" | "revoked" | "suspended" | "archived";
 }
 
 export class UpdateCredentialStatusDto {
-  @ApiProperty({ enum: ["valid", "invalid", "expired", "revoked"] })
+  @ApiProperty({ enum: ["valid", "invalid", "expired", "revoked", "suspended", "archived"] })
   @IsString()
   @IsNotEmpty()
-  status: "valid" | "invalid" | "expired" | "revoked";
+  status: "valid" | "invalid" | "expired" | "revoked" | "suspended" | "archived";
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, example: "Credential suspended pending investigation" })
+  @IsString()
+  @IsOptional()
+  reason?: string;
+}
+
+export class GeneratePresentationDto {
+  @ApiProperty({ required: false, default: 15, example: 15, description: "TTL in minutes" })
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  @IsOptional()
+  ttlMinutes?: number;
+}
+
+export class ExpirePresentationDto {
+  @ApiProperty({ required: false, example: "Manually expired by operator" })
   @IsString()
   @IsOptional()
   reason?: string;

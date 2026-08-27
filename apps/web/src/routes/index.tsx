@@ -77,7 +77,7 @@ function LandingPage() {
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
                 <Link
-                  to="/app"
+                  to="/login"
                   className="inline-flex min-h-11 items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-body-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-strong"
                 >
                   <ScanLine className="size-4" aria-hidden="true" />
@@ -173,7 +173,7 @@ function LandingPage() {
                 authenticity of its own.
               </p>
               <Link
-                to="/app"
+                to="/login"
                 className="mt-8 inline-flex min-h-11 items-center gap-2 rounded-md border border-border bg-surface-strong px-5 py-2.5 text-body-sm font-semibold text-foreground transition-colors hover:bg-muted"
               >
                 Open the demo app

@@ -109,4 +109,11 @@ export class VerificationController {
   async getReceipt(@Param("id") id: string): Promise<TrustReceiptViewModel> {
     return this.verificationService.getTrustReceipt(id);
   }
+
+  @Post("receipts/verify")
+  @ApiOperation({ summary: "Cryptographically verify a Trust Receipt signature and canonical payload" })
+  @ApiResponse({ status: 200 })
+  verifyReceipt(@Body() receipt: any): { isValid: boolean; reason: string } {
+    return this.verificationService.verifyTrustReceipt(receipt);
+  }
 }

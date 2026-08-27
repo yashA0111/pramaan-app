@@ -9,6 +9,11 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["test/**/*.e2e-spec.ts", "src/**/*.spec.ts"],
+    include: [
+      "test/**/*.{spec,e2e-spec,test}.ts",
+      "src/**/*.{spec,test}.ts",
+    ],
+    pool: "forks",
+    testTimeout: 10000,
   },
 });

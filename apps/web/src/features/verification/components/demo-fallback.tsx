@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { DEMO_SCENARIO_LIST, PRIMARY_DEMO_REFERENCE } from "../demo-registry";
-import { formatCredentialUri } from "../qr";
+import { formatPermanentCredentialUri } from "../qr";
 
 interface DemoFallbackProps {
   onUseReference: (reference: string) => void;
@@ -84,7 +84,7 @@ export function DemoFallback({ onUseReference, disabled = false, className }: De
  */
 export function DemoQrCode({ reference = PRIMARY_DEMO_REFERENCE, className }: { reference?: string; className?: string }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
-  const uri = formatCredentialUri(reference);
+  const uri = formatPermanentCredentialUri(reference);
 
   useEffect(() => {
     let cancelled = false;

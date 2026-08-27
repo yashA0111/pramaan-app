@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
+import { BiometricPort } from "./biometric.port";
 import { FastApiBiometricAdapter } from "./fastapi-biometric.adapter";
 import {
   IdentityVerificationInputDto,
@@ -7,7 +8,9 @@ import {
 
 @Injectable()
 export class IdentityService {
-  constructor(private readonly biometricAdapter: FastApiBiometricAdapter) {}
+  constructor(
+    @Inject(FastApiBiometricAdapter) private readonly biometricAdapter: BiometricPort,
+  ) {}
 
   async verifyIdentity(
     credentialReference: string,

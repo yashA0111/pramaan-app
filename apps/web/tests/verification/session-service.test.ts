@@ -13,11 +13,22 @@ import {
   verifyIdentity,
 } from "@/features/verification/session-service";
 import type { VerificationSession } from "@/types/verification-session";
+import { formatPermanentCredentialUri } from "@/features/verification/qr";
+async function advanceTime(ms: number): Promise<void> {
+  if (typeof (vi as any).advanceTimersByTimeAsync === "function") {
+    await (vi as any).advanceTimersByTimeAsync(ms);
+  } else {
+    vi.advanceTimersByTime(ms);
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+  }
+}
 
 /** Resolves a mocked request by pushing the fake clock past its latency. */
 async function settle<T>(promise: Promise<T>): Promise<T> {
   promise.catch(() => {});
-  await vi.advanceTimersByTimeAsync(2_000);
+  await advanceTime(2_000);
   return promise;
 }
 
@@ -46,7 +57,25 @@ afterEach(() => {
 });
 
 describe("QR decoding", () => {
-  it("decoding a payload verifies nothing on its own", async () => {
+  it("decodes the stable permanent credential QR", async () => {
+    const uri = formatPermanentCredentialUri("prm-demo-0001");
+    const scan = await settle(decodeQr(uri));
+
+    expect(uri).toBe("pramaan://credential/PRM-DEMO-0001");
+    expect(scan.outcome).toBe("qr_decoded");
+    expect(scan.credentialReference).toBe("PRM-DEMO-0001");
+    expect(scan.message).toMatch(/nothing is verified/i);
+  });
+
+  it("decodes a v1 opaque presentation token cleanly", async () => {
+    const scan = await settle(decodeQr("pramaan://verify/v1/prm_pres_AbCdEf1234567890"));
+
+    expect(scan.outcome).toBe("qr_decoded");
+    expect(scan.credentialReference).toBe("PRM-DEMO-0001");
+    expect(scan.message).toMatch(/decoded/i);
+  });
+
+  it("decoding a legacy payload verifies nothing on its own", async () => {
     const scan = await settle(decodeQr("PRM-DEMO-0001"));
 
     expect(scan.outcome).toBe("qr_decoded");
@@ -126,7 +155,7 @@ describe("official confirmation", () => {
     const requested = await settle(requestOfficialConfirmation(session.sessionId));
     expect(requested.confirmation.state).toBe("pending");
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTime(5_000);
     const resolved = await settle(pollOfficialConfirmation(session.sessionId));
 
     expect(resolved.confirmation.state).toBe("accepted");
@@ -140,7 +169,7 @@ describe("official confirmation", () => {
     expect(identity.identity?.matchResult).toBe("inconclusive");
 
     await settle(requestOfficialConfirmation(session.sessionId));
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTime(5_000);
     const resolved = await settle(pollOfficialConfirmation(session.sessionId));
 
     expect(resolved.confirmation.state).toBe("accepted");
@@ -152,7 +181,7 @@ describe("official confirmation", () => {
     const session = await startSession("PRM-DEMO-0008");
     await settle(verifyIdentity(session.sessionId, { observation: "single_face" }));
     await settle(requestOfficialConfirmation(session.sessionId));
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTime(5_000);
     const resolved = await settle(pollOfficialConfirmation(session.sessionId));
 
     expect(resolved.confirmation.state).toBe("rejected");
@@ -164,11 +193,11 @@ describe("official confirmation", () => {
     await settle(verifyIdentity(session.sessionId, { observation: "single_face" }));
     await settle(requestOfficialConfirmation(session.sessionId));
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTime(5_000);
     const stillPending = await settle(pollOfficialConfirmation(session.sessionId));
     expect(stillPending.confirmation.state).toBe("pending");
 
-    await vi.advanceTimersByTimeAsync(10_000);
+    await advanceTime(10_000);
     const timedOut = await settle(pollOfficialConfirmation(session.sessionId));
 
     expect(timedOut.confirmation.state).toBe("timeout");

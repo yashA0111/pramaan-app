@@ -101,16 +101,26 @@ function mockDecodeQr(raw: string, options: DecodeQrOptions = {}): QrScanResult 
       ...base,
       outcome: "invalid_qr" as const,
       credentialReference: null,
-      message: "This looks like a Pramaan code, but the reference is malformed.",
+      message: "This looks like a Pramaan code, but the reference or presentation token is malformed.",
     };
   }
 
-  const scenario = findScenario(parsed.reference);
+  // permanent_credential: pramaan://credential/<ref> — permanent physical ID card QR
+  // presentation_token: pramaan://verify/v1/<token> — ephemeral presentation (map to PRM-DEMO-0001 in mock)
+  // reference: pramaan://verify/<ref> or bare ref — legacy/dev path
+  const targetRef =
+    parsed.kind === "permanent_credential"
+      ? parsed.reference
+      : parsed.kind === "presentation_token"
+        ? "PRM-DEMO-0001"
+        : parsed.reference;
+
+  const scenario = findScenario(targetRef);
   if (!scenario) {
     return {
       ...base,
       outcome: "expired_reference" as const,
-      credentialReference: parsed.reference,
+      credentialReference: targetRef,
       message: "This reference is no longer active in the demo registry.",
     };
   }
@@ -118,7 +128,7 @@ function mockDecodeQr(raw: string, options: DecodeQrOptions = {}): QrScanResult 
     return {
       ...base,
       outcome: "service_unavailable" as const,
-      credentialReference: parsed.reference,
+      credentialReference: targetRef,
       message: "The verification service did not respond. Nothing has been verified.",
     };
   }
@@ -126,8 +136,8 @@ function mockDecodeQr(raw: string, options: DecodeQrOptions = {}): QrScanResult 
   return {
     ...base,
     outcome: "qr_decoded" as const,
-    credentialReference: parsed.reference,
-    message: "Credential reference decoded. Nothing is verified yet.",
+    credentialReference: targetRef,
+    message: "Credential presentation decoded. Nothing is verified yet.",
   };
 }
 

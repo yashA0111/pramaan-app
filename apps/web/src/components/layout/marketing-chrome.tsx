@@ -20,13 +20,13 @@ export function MarketingHeader() {
             How it works
           </a>
           <Link
-            to="/official"
+            to="/login"
             className="hidden min-h-11 items-center rounded-md px-3 text-body-sm font-medium text-foreground-muted transition-colors hover:bg-muted hover:text-foreground sm:inline-flex"
           >
-            Official console
+            Demo login
           </Link>
           <Link
-            to="/app"
+            to="/login"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-primary px-4 text-body-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Open the app

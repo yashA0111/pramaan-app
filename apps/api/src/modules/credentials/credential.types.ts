@@ -1,4 +1,4 @@
-export type CredentialRegistryStatus = "active" | "expired" | "revoked" | "unknown";
+export type CredentialRegistryStatus = "active" | "expired" | "revoked" | "suspended" | "archived" | "unknown";
 export type CredentialOutcome = "unknown" | "valid" | "invalid" | "expired" | "revoked" | "unavailable";
 
 export interface IssuerSummary {

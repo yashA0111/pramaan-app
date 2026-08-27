@@ -25,12 +25,12 @@ export class ApiError extends Error {
 }
 
 export const API_BASE_URL =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
+  (typeof import.meta !== "undefined" && import.meta.env?.["VITE_API_URL"]) ||
   "http://localhost:3001/api/v1";
 
 export const IS_MOCK_FORCED =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_USE_MOCK === "true") ||
-  (typeof process !== "undefined" && (process.env.NODE_ENV === "test" || process.env.VITEST === "true"));
+  (typeof import.meta !== "undefined" && import.meta.env?.["VITE_USE_MOCK"] === "true") ||
+  (typeof process !== "undefined" && (process.env["NODE_ENV"] === "test" || process.env["VITEST"] === "true"));
 
 export interface RequestOptions {
   headers?: Record<string, string>;
@@ -41,6 +41,27 @@ export interface RequestOptions {
 
 function jitteredLatency(): number {
   return 350 + Math.floor(Math.random() * 550);
+}
+
+function demoSessionHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem("pramaan.demo.session");
+    if (!raw) return {};
+    const user = JSON.parse(raw) as { id?: string; role?: string; email?: string; displayName?: string };
+    if (!user.id || !user.role) return {};
+    return {
+      "x-user-id": user.id,
+      "x-demo-role": user.role,
+      "x-user-email": user.email || "",
+      "x-user-name": user.displayName || "",
+      ...(user.role === "demo_admin" && import.meta.env["VITE_DEMO_ADMIN_API_KEY"]
+        ? { "x-demo-admin-key": import.meta.env["VITE_DEMO_ADMIN_API_KEY"] }
+        : {}),
+    };
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -103,6 +124,7 @@ export async function apiRequest<T>(
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
+        ...demoSessionHeaders(),
         ...fetchOptions.headers,
       },
     });

@@ -10,6 +10,7 @@
     "start": "node .output/server/index.mjs",
     "preview": "npx wrangler --cwd .output dev --compatibility-date 2025-03-10",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

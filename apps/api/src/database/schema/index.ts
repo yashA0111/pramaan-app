@@ -56,6 +56,7 @@ export const officialsRelations = relations(officials, ({ one, many }) => ({
   }),
   confirmationRequests: many(officialConfirmationRequests),
   demoAssets: many(demoAssets),
+  qrPresentations: many(qrPresentations),
 }));
 
 /* ---------------------------------------------------------------- issuers */
@@ -110,6 +111,7 @@ export const credentialsRelations = relations(credentials, ({ one, many }) => ({
   }),
   statusHistory: many(credentialStatusHistory),
   verificationSessions: many(verificationSessions),
+  qrPresentations: many(qrPresentations),
 }));
 
 /* --------------------------------------------- credential_status_history */
@@ -404,3 +406,41 @@ export const demoAssetsRelations = relations(demoAssets, ({ one }) => ({
     references: [officials.id],
   }),
 }));
+
+/* ------------------------------------------------------ qr_presentations */
+
+export const qrPresentations = pgTable("qr_presentations", {
+  id: varchar("id", { length: 64 }).primaryKey(), // e.g. pres_...
+  credentialId: varchar("credential_id", { length: 64 })
+    .notNull()
+    .references(() => credentials.id, { onDelete: "cascade" }),
+  officialId: varchar("official_id", { length: 64 })
+    .notNull()
+    .references(() => officials.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(), // SHA-256 hex
+  status: varchar("status", { length: 32 }).notNull().default("active"), // active | expired | invalidated | revoked
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  invalidatedAt: timestamp("invalidated_at", { withTimezone: true }),
+  invalidatedReason: text("invalidated_reason"),
+  createdById: varchar("created_by_id", { length: 64 }).references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const qrPresentationsRelations = relations(qrPresentations, ({ one }) => ({
+  credential: one(credentials, {
+    fields: [qrPresentations.credentialId],
+    references: [credentials.id],
+  }),
+  official: one(officials, {
+    fields: [qrPresentations.officialId],
+    references: [officials.id],
+  }),
+  createdBy: one(users, {
+    fields: [qrPresentations.createdById],
+    references: [users.id],
+  }),
+}));
+

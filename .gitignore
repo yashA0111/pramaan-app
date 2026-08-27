@@ -1,9 +1,21 @@
 node_modules/
+.pnpm-store/
+.npm/
+services/biometric/.venv/
+services/biometric/models/
+services/biometric/__pycache__/
+services/biometric/*.pyc
 .env*
 !.env.example
 .output/
 .wrangler/
 dist/
+coverage/
+*.log
+uploads/
+tmp/
+.DS_Store
+Thumbs.db
 
 # Agents & Skills
 .agents/
@@ -19,3 +31,4 @@ skills-lock.json
 !**/README.md
 !**/readme.md
 
+DEPLOYMENT.md

@@ -19,13 +19,14 @@ export class FastApiBiometricAdapter implements BiometricPort {
   ): Promise<IdentityVerificationResult> {
     const serviceUrl = config.biometricServiceUrl;
 
-    if (!serviceUrl || serviceUrl === "mock" || serviceUrl === "disabled") {
+    // Explicit mock/test mode only
+    if (serviceUrl === "mock" || serviceUrl === "disabled") {
       return this.fallbackAdapter.verifyIdentity(credentialReference, input);
     }
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -42,7 +43,7 @@ export class FastApiBiometricAdapter implements BiometricPort {
           observation: input.observation,
           quality: input.quality ?? 1.0,
           captured_frame: input.capturedFrameBase64,
-          reference_path: input.referencePhotoPath,
+          reference_photo: input.referencePhotoPath,
         }),
         signal: controller.signal,
       });
@@ -55,17 +56,45 @@ export class FastApiBiometricAdapter implements BiometricPort {
           status: data.status,
           matchResult: data.match_result,
           confidence: data.confidence ?? null,
-          modelVersion: data.model_version || "yunet_sface_onnx",
+          modelVersion: data.model_version || "pramaan-onnx-yunet-sface-1.0.0",
           timestamp: data.timestamp || new Date().toISOString(),
           reason: data.reason || "Biometric comparison completed.",
         };
+      } else {
+        this.logger.warn(`Biometric microservice returned HTTP ${response.status}`);
+        return {
+          status: "offline",
+          matchResult: "not_performed",
+          confidence: null,
+          modelVersion: "pramaan-onnx-yunet-sface-1.0.0",
+          timestamp: new Date().toISOString(),
+          reason: `Biometric microservice returned status ${response.status}.`,
+        };
       }
     } catch (err: any) {
-      this.logger.debug(
-        `FastAPI biometric service unreachable (${err.message}). Using deterministic fallback adapter.`,
-      );
-    }
+      if (err.name === "AbortError") {
+        this.logger.error("Biometric microservice request timed out.");
+        return {
+          status: "timeout",
+          matchResult: "not_performed",
+          confidence: null,
+          modelVersion: "pramaan-onnx-yunet-sface-1.0.0",
+          timestamp: new Date().toISOString(),
+          reason: "The biometric verification microservice timed out.",
+        };
+      }
 
-    return this.fallbackAdapter.verifyIdentity(credentialReference, input);
+      this.logger.warn(
+        `FastAPI biometric service unreachable: ${err.message}. Reporting service unavailable honestly.`,
+      );
+      return {
+        status: "offline",
+        matchResult: "not_performed",
+        confidence: null,
+        modelVersion: "pramaan-onnx-yunet-sface-1.0.0",
+        timestamp: new Date().toISOString(),
+        reason: "The biometric verification microservice is unreachable.",
+      };
+    }
   }
 }

@@ -12,30 +12,17 @@ export class AuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
 
-    // Check header or cookie for session / user identity
     const authHeader = request.headers["authorization"];
     const customUserId = request.headers["x-user-id"];
-    const customRole = request.headers["x-demo-role"] || request.headers["x-user-role"];
+    const claimedRole = request.headers["x-demo-role"] || request.headers["x-user-role"];
     const customEmail = request.headers["x-user-email"];
+    const adminKey = request.headers["x-demo-admin-key"] || request.headers["x-admin-key"];
 
     let user: AuthenticatedUser | null = null;
 
-    if (customUserId) {
-      const email = (customEmail as string) || `${customUserId}@pramaan.dev`;
-      const isDemoAdmin =
-        customRole === "demo_admin" ||
-        customRole === "admin" ||
-        config.demoAdminEmails.includes(email.toLowerCase());
-
-      user = {
-        id: customUserId as string,
-        role: isDemoAdmin ? "demo_admin" : (customRole as any) || "citizen",
-        email,
-        displayName: (request.headers["x-user-name"] as string) || "Authenticated User",
-      };
-    } else if (authHeader && authHeader.startsWith("Bearer ")) {
+    // 1. Bearer Token Authentication
+    if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.slice(7).trim();
-      // Handle simple token or bearer formatting
       if (token.startsWith("admin_") || token.includes("admin")) {
         user = {
           id: "usr_admin_001",
@@ -58,8 +45,48 @@ export class AuthGuard implements CanActivate {
           displayName: "Citizen Demo User",
         };
       }
+    }
+    // 2. Verified Admin Key (Development / Demo Operator Mode)
+    else if (adminKey) {
+      const configuredAdminKey = process.env.DEMO_ADMIN_API_KEY;
+      const isValidKey = Boolean(configuredAdminKey) && adminKey === configuredAdminKey;
+      if (isValidKey) {
+        user = {
+          id: (customUserId as string) || "usr_admin_001",
+          role: "demo_admin",
+          email: (customEmail as string) || "admin@pramaan.dev",
+          displayName: (request.headers["x-user-name"] as string) || "Pramaan Demo Admin",
+        };
+      } else {
+        user = {
+          id: "usr_citizen_001",
+          role: "citizen",
+          email: "citizen@pramaan.dev",
+          displayName: "Citizen Demo User",
+        };
+      }
+    }
+    // 3. User Header Identity (Protected against unverified demo_admin elevation)
+    else if (customUserId) {
+      const email = (customEmail as string) || `${customUserId}@pramaan.dev`;
+      const isEmailAllowedAdmin = config.demoAdminEmails.includes(email.toLowerCase());
+
+      // If claiming demo_admin without verified admin key or allowed admin email, downgrade to citizen
+      let assignedRole: "citizen" | "official" | "demo_admin" = "citizen";
+      if (claimedRole === "official") {
+        assignedRole = "official";
+      } else if ((claimedRole === "demo_admin" || claimedRole === "admin") && isEmailAllowedAdmin) {
+        assignedRole = "demo_admin";
+      }
+
+      user = {
+        id: customUserId as string,
+        role: assignedRole,
+        email,
+        displayName: (request.headers["x-user-name"] as string) || "Authenticated User",
+      };
     } else {
-      // Default dev fallback citizen context
+      // Default dev fallback context: non-privileged citizen
       user = {
         id: "usr_citizen_001",
         role: "citizen",

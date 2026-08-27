@@ -15,6 +15,8 @@ import { IdentityModule } from "./modules/identity/identity.module";
 import { SafetyModule } from "./modules/safety/safety.module";
 import { StorageModule } from "./modules/storage/storage.module";
 import { VerificationModule } from "./modules/verification/verification.module";
+import { OfficialModule } from "./modules/official/official.module";
+import { QrPresentationModule } from "./modules/qr-presentation/qr-presentation.module";
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { VerificationModule } from "./modules/verification/verification.module";
     StorageModule,
     AuthModule,
     CredentialsModule,
+    QrPresentationModule,
+    OfficialModule,
     IdentityModule,
     ConfirmationModule,
     VerificationModule,

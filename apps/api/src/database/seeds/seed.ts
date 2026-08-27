@@ -368,6 +368,56 @@ export async function runSeed(): Promise<boolean> {
       ])
       .onConflictDoNothing();
 
+    // 6. QR Presentations (Opaque Presentation Tokens with SHA-256 Hashes)
+    console.log("-> Seeding QR presentations...");
+    const crypto = await import("crypto");
+    const demoPresentations = [
+      {
+        id: "pres_demo_0001",
+        credentialId: "cred_prm_demo_0001",
+        officialId: "off_arjun_mehta",
+        token: "prm_pres_demo_arjun_0001",
+        status: "active",
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: "pres_demo_0002",
+        credentialId: "cred_prm_demo_0002",
+        officialId: "off_ravi_iyer",
+        token: "prm_pres_demo_ravi_0002",
+        status: "active",
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: "pres_demo_0006",
+        credentialId: "cred_prm_demo_0006",
+        officialId: "off_deepak_rana",
+        token: "prm_pres_demo_deepak_0006",
+        status: "active",
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      },
+    ];
+
+    for (const p of demoPresentations) {
+      const tokenHash = crypto.createHash("sha256").update(p.token).digest("hex");
+      await db
+        .insert(schema.qrPresentations)
+        .values({
+          id: p.id,
+          credentialId: p.credentialId,
+          officialId: p.officialId,
+          tokenHash,
+          status: p.status,
+          expiresAt: p.expiresAt,
+          invalidatedAt: null,
+          invalidatedReason: null,
+          createdById: "usr_admin_001",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .onConflictDoNothing();
+    }
+
     console.log("✅ Synthetic demo registry successfully seeded.");
     return true;
   } catch (error: any) {

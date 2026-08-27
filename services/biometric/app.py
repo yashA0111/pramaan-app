@@ -1,5 +1,6 @@
 """
-FastAPI Biometric Service for Pramaan.
+FastAPI Biometric Verification Service for Pramaan.
+Executes 1:1 face detection and identity comparison using OpenCV YuNet and SFace ONNX engine.
 """
 
 from fastapi import FastAPI, HTTPException, Request
@@ -21,7 +22,8 @@ class BiometricRequest(BaseModel):
     observation: str = Field(default="single_face", example="single_face")
     quality: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
     captured_frame: Optional[str] = None
-    reference_path: Optional[str] = None
+    reference_photo: Optional[str] = None
+    threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 class BiometricResponse(BaseModel):
     status: str
@@ -44,7 +46,10 @@ def verify_face(payload: BiometricRequest):
     result = engine.compare_faces(
         credential_reference=payload.credential_reference,
         observation=payload.observation,
-        quality=payload.quality or 1.0
+        quality=payload.quality if payload.quality is not None else 1.0,
+        captured_frame_base64=payload.captured_frame,
+        reference_photo_base64=payload.reference_photo,
+        threshold_override=payload.threshold,
     )
     result["timestamp"] = datetime.datetime.utcnow().isoformat() + "Z"
     return result

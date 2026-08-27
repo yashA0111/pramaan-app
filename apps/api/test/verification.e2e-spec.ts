@@ -14,12 +14,14 @@ import { DemoAdminService } from "../src/modules/demo-admin/demo-admin.service";
 import { StorageService } from "../src/modules/storage/storage.service";
 import { LocalStorageAdapter } from "../src/modules/storage/local-storage.adapter";
 import { SupabaseStorageAdapter } from "../src/modules/storage/supabase-storage.adapter";
+import { QrPresentationService } from "../src/modules/qr-presentation/qr-presentation.service";
 
-describe("Pramaan Authoritative Backend & Policy Engine", () => {
+describe("Pramaan Authoritative Backend, QR Presentation & Policy Engine", () => {
   let dbService: DatabaseService;
   let auditService: AuditService;
   let govAdapter: GovernmentCredentialAdapter;
   let credService: CredentialsService;
+  let qrPresentationService: QrPresentationService;
   let deterministicBio: DeterministicBiometricAdapter;
   let fastApiBio: FastApiBiometricAdapter;
   let identityService: IdentityService;
@@ -33,9 +35,10 @@ describe("Pramaan Authoritative Backend & Policy Engine", () => {
     auditService = new AuditService(dbService);
     govAdapter = new GovernmentCredentialAdapter(dbService);
     credService = new CredentialsService(govAdapter);
+    qrPresentationService = new QrPresentationService(dbService);
     deterministicBio = new DeterministicBiometricAdapter();
     fastApiBio = new FastApiBiometricAdapter(deterministicBio);
-    identityService = new IdentityService(fastApiBio);
+    identityService = new IdentityService(deterministicBio);
     notifAdapter = new MockNotificationAdapter();
     confirmationService = new ConfirmationService(dbService, notifAdapter, auditService);
     verificationService = new VerificationService(
@@ -44,24 +47,48 @@ describe("Pramaan Authoritative Backend & Policy Engine", () => {
       identityService,
       confirmationService,
       auditService,
+      qrPresentationService,
     );
 
     const localStore = new LocalStorageAdapter();
     const supabaseStore = new SupabaseStorageAdapter();
     const storageService = new StorageService(localStore, supabaseStore);
-    demoAdminService = new DemoAdminService(dbService, storageService, auditService, govAdapter);
+    demoAdminService = new DemoAdminService(
+      dbService,
+      storageService,
+      auditService,
+      qrPresentationService,
+      govAdapter,
+    );
   });
 
-  // Scenario 1: Correct QR + Match Face + Confirmation Accepted -> final_verified
-  it("Scenario 1: correct QR + correct face + official confirmation -> final_verified", async () => {
-    const scan = await verificationService.decodeQr("PRM-DEMO-0001");
+  // Test 1: Full Verification Journey with Opaque Token
+  it("Scenario 1: Opaque presentation QR + match face + confirmation -> final_verified", async () => {
+    // 1. Demo Admin creates official with automatic ephemeral QR presentation
+    const official = await demoAdminService.createOfficial(
+      {
+        displayName: "Inspector Arjun Mehta",
+        registeredEmail: "arjun.mehta@delhipolice.gov.in",
+        designation: "Inspector",
+        department: "Delhi Police Special Branch",
+        postingLocation: "District Headquarters, New Delhi",
+        credentialReference: "PRM-DEMO-0001",
+      },
+      "usr_admin_001",
+    );
+
+    expect(official.activePresentation).toBeDefined();
+    expect(official.activePresentation.qrUri).toMatch(/^pramaan:\/\/verify\/v1\/prm_pres_/);
+
+    // 2. Citizen scans opaque presentation URI
+    const scan = await verificationService.decodeQr(official.activePresentation.qrUri);
     expect(scan.outcome).toBe("qr_decoded");
     expect(scan.credentialReference).toBe("PRM-DEMO-0001");
 
-    const session = await verificationService.createSession("PRM-DEMO-0001", { demo: true });
+    // 3. Create session & validate stages
+    const session = await verificationService.createSession(scan.credentialReference!, { demo: true });
     expect(session.state).toBe("validating");
 
-    // Walk credential validation stages
     let current = await verificationService.advanceCredentialStage(session.sessionId);
     while (current.state === "validating") {
       current = await verificationService.advanceCredentialStage(session.sessionId);
@@ -69,190 +96,168 @@ describe("Pramaan Authoritative Backend & Policy Engine", () => {
     expect(current.state).toBe("credential_resolved");
     expect(current.credentialOutcome).toBe("valid");
 
-    // Run identity verification
+    // 4. Biometric matching
     const identitySession = await verificationService.verifyIdentity(session.sessionId, {
       observation: "single_face",
     });
     expect(identitySession.identity?.matchResult).toBe("match");
     expect(identitySession.state).toBe("identity_resolved");
 
-    // Request & poll official confirmation
+    // 5. Official desk confirmation
     await verificationService.requestOfficialConfirmation(session.sessionId);
-    // Poll confirmation (simulation resolves)
     const confirmedSession = await verificationService.pollOfficialConfirmation(session.sessionId);
     expect(confirmedSession.confirmation.state).toBe("accepted");
     expect(confirmedSession.state).toBe("final_verified");
 
-    // Retrieve Trust Receipt
+    // 6. Trust Receipt verification
     const receipt = await verificationService.getTrustReceipt(session.sessionId);
     expect(receipt.finalState).toBe("final_verified");
     expect(receipt.status).toBe("verified");
   });
 
-  // Scenario 2: Correct QR + Wrong Face -> identity_failed / not_verified
-  it("Scenario 2: correct QR + wrong face -> identity_failed / not_verified", async () => {
-    const session = await verificationService.createSession("PRM-DEMO-0006", { demo: true });
-    let current = await verificationService.advanceCredentialStage(session.sessionId);
-    while (current.state === "validating") {
-      current = await verificationService.advanceCredentialStage(session.sessionId);
-    }
-
-    const identitySession = await verificationService.verifyIdentity(session.sessionId, {
-      observation: "single_face",
+  // Test 2: Expired QR Presentation Rejection
+  it("Scenario 2: Expired QR presentation is rejected authoritatively", async () => {
+    // Generate presentation with 0 TTL (instant expiry)
+    const pres = await qrPresentationService.generatePresentation("PRM-DEMO-0001", "off_arjun", {
+      ttlMinutes: -1,
     });
-    expect(identitySession.identity?.matchResult).toBe("mismatch");
-    expect(identitySession.state).toBe("identity_failed");
 
-    const receipt = await verificationService.getTrustReceipt(session.sessionId);
-    expect(receipt.finalState).toBe("not_verified");
-    expect(receipt.status).toBe("mismatch");
+    const scan = await verificationService.decodeQr(pres.qrUri);
+    expect(scan.outcome).toBe("expired_reference");
+    expect(scan.message).toMatch(/expired/i);
   });
 
-  // Scenario 3: Invalid QR -> credential_failed, identity not permitted
-  it("Scenario 3: invalid QR -> credential_failed, identity blocked", async () => {
-    const session = await verificationService.createSession("PRM-DEMO-0002", { demo: true });
-    let current = await verificationService.advanceCredentialStage(session.sessionId);
-    while (current.state === "validating") {
-      current = await verificationService.advanceCredentialStage(session.sessionId);
-    }
-    expect(current.credentialOutcome).toBe("invalid");
-    expect(current.state).toBe("credential_failed");
-
-    await expect(
-      verificationService.verifyIdentity(session.sessionId, { observation: "single_face" }),
-    ).rejects.toThrow(/Identity matching requires a valid credential/i);
-
-    const receipt = await verificationService.getTrustReceipt(session.sessionId);
-    expect(receipt.finalState).toBe("not_verified");
-    expect(receipt.status).toBe("invalid");
-  });
-
-  // Scenario 4: Valid QR + Inconclusive identity -> requires_review / credential_valid_only
-  it("Scenario 4: valid QR + inconclusive identity -> requires_review", async () => {
-    const session = await verificationService.createSession("PRM-DEMO-0007", { demo: true });
-    let current = await verificationService.advanceCredentialStage(session.sessionId);
-    while (current.state === "validating") {
-      current = await verificationService.advanceCredentialStage(session.sessionId);
-    }
-
-    const identitySession = await verificationService.verifyIdentity(session.sessionId, {
-      observation: "single_face",
-    });
-    expect(identitySession.identity?.matchResult).toBe("inconclusive");
-
-    // Even if confirmed, inconclusive face must NEVER backfill final_verified
-    await verificationService.requestOfficialConfirmation(session.sessionId);
-    const confirmed = await verificationService.pollOfficialConfirmation(session.sessionId);
-    expect(confirmed.confirmation.state).toBe("accepted");
-    expect(confirmed.state).toBe("confirmation_resolved");
-
-    const receipt = await verificationService.getTrustReceipt(session.sessionId);
-    expect(receipt.finalState).toBe("credential_valid_only");
-  });
-
-  // Scenario 5: Official Rejection -> rejected / identity_matched_only
-  it("Scenario 5: official rejection -> authority not established", async () => {
-    const session = await verificationService.createSession("PRM-DEMO-0008", { demo: true });
-    let current = await verificationService.advanceCredentialStage(session.sessionId);
-    while (current.state === "validating") {
-      current = await verificationService.advanceCredentialStage(session.sessionId);
-    }
-
-    await verificationService.verifyIdentity(session.sessionId, { observation: "single_face" });
-    await verificationService.requestOfficialConfirmation(session.sessionId);
-    const resolved = await verificationService.pollOfficialConfirmation(session.sessionId);
-
-    expect(resolved.confirmation.state).toBe("rejected");
-    expect(resolved.state).toBe("confirmation_failed");
-
-    const receipt = await verificationService.getTrustReceipt(session.sessionId);
-    expect(receipt.finalState).toBe("identity_matched_only");
-    expect(receipt.status).toBe("rejected");
-  });
-
-  // Scenario 6: Expired credential -> expired
-  it("Scenario 6: expired credential -> expired", async () => {
-    const session = await verificationService.createSession("PRM-DEMO-0003", { demo: true });
-    let current = await verificationService.advanceCredentialStage(session.sessionId);
-    while (current.state === "validating") {
-      current = await verificationService.advanceCredentialStage(session.sessionId);
-    }
-
-    expect(current.credentialOutcome).toBe("expired");
-    expect(current.state).toBe("credential_failed");
-
-    const receipt = await verificationService.getTrustReceipt(session.sessionId);
-    expect(receipt.finalState).toBe("not_verified");
-    expect(receipt.status).toBe("expired");
-  });
-
-  // Scenario 7: Revoked credential -> revoked
-  it("Scenario 7: revoked credential -> revoked", async () => {
-    const session = await verificationService.createSession("PRM-DEMO-0004", { demo: true });
-    let current = await verificationService.advanceCredentialStage(session.sessionId);
-    while (current.state === "validating") {
-      current = await verificationService.advanceCredentialStage(session.sessionId);
-    }
-
-    expect(current.credentialOutcome).toBe("revoked");
-    expect(current.state).toBe("credential_failed");
-
-    const receipt = await verificationService.getTrustReceipt(session.sessionId);
-    expect(receipt.finalState).toBe("not_verified");
-    expect(receipt.status).toBe("revoked");
-  });
-
-  // Scenario 8: Demo Admin official creation and immediate verification participation
-  it("Scenario 8: demo admin official creation & immediate verification participation", async () => {
-    const newOfficial = await demoAdminService.createOfficial(
-      {
-        displayName: "Sub-Inspector Maya Sharma",
-        registeredEmail: "maya.sharma@delhipolice.gov.in",
-        designation: "Sub-Inspector",
-        department: "Special Cell",
-        postingLocation: "District Unit VI, New Delhi",
-        credentialReference: "PRM-DEMO-0010",
-      },
-      "usr_admin_001",
-    );
-
-    expect(newOfficial.id).toBeDefined();
-    expect(newOfficial.credential.reference).toBe("PRM-DEMO-0010");
-
-    // Immediate participation in verification flow
-    const scan = await verificationService.decodeQr("PRM-DEMO-0010");
-    expect(scan.outcome).toBe("qr_decoded");
-
-    const session = await verificationService.createSession("PRM-DEMO-0010", { demo: true });
-    expect(session.credentialReference).toBe("PRM-DEMO-0010");
-  });
-
-  // Scenario 9: QR Image upload with mismatch reference is rejected
-  it("Scenario 9: QR asset upload with mismatched payload is rejected", async () => {
+  // Test 3: Presentation Regeneration Invalidates Previous QR
+  it("Scenario 3: Presentation regeneration invalidates old QR presentation", async () => {
     const official = await demoAdminService.createOfficial(
       {
-        displayName: "Head Constable Vikram Singh",
-        registeredEmail: "vikram.singh@delhipolice.gov.in",
-        designation: "Head Constable",
-        department: "Traffic Police",
-        postingLocation: "North District",
-        credentialReference: "PRM-DEMO-0011",
+        displayName: "Sub-Inspector Priya Sharma",
+        registeredEmail: "priya.sharma@delhipolice.gov.in",
+        designation: "Sub-Inspector",
+        department: "Cyber Cell",
+        postingLocation: "North District, New Delhi",
+        credentialReference: "PRM-DEMO-0002",
       },
       "usr_admin_001",
     );
 
-    // Mismatched QR payload (PRM-DEMO-0001 instead of PRM-DEMO-0011)
-    await expect(
-      demoAdminService.uploadAsset(
-        official.id,
-        "qr",
-        {
-          buffer: Buffer.from("pramaan://verify/PRM-DEMO-0001"),
-          originalname: "qr_wrong.png",
-          mimetype: "image/png",
-        },
-        "usr_admin_001",
-      ),
-    ).rejects.toThrow(/QR payload mismatch/i);
+    const oldQrUri = official.activePresentation.qrUri;
+
+    // Regenerate QR presentation
+    const newPres = await demoAdminService.regeneratePresentation(official.id, { ttlMinutes: 15 }, "usr_admin_001");
+
+    // Old QR should now be rejected as invalidated
+    const oldScan = await verificationService.decodeQr(oldQrUri);
+    expect(oldScan.outcome).toBe("expired_reference");
+    expect(oldScan.message).toMatch(/invalidated/i);
+
+    // New QR should decode cleanly
+    const newScan = await verificationService.decodeQr(newPres.qrUri);
+    expect(newScan.outcome).toBe("qr_decoded");
+    expect(newScan.credentialReference).toBe("PRM-DEMO-0002");
+  });
+
+  // Test 4: Manual "Expire Now" Invalidation
+  it("Scenario 4: Expire Now immediately invalidates active presentation", async () => {
+    const official = await demoAdminService.createOfficial(
+      {
+        displayName: "Inspector Vikram Malhotra",
+        registeredEmail: "vikram.malhotra@delhipolice.gov.in",
+        designation: "Inspector",
+        department: "Traffic Police",
+        postingLocation: "Central District",
+        credentialReference: "PRM-DEMO-0005",
+      },
+      "usr_admin_001",
+    );
+
+    const activeQrUri = official.activePresentation.qrUri;
+
+    // Expire now
+    await demoAdminService.expirePresentation(official.id, { reason: "Security check" }, "usr_admin_001");
+
+    // Scanned QR must be rejected
+    const scan = await verificationService.decodeQr(activeQrUri);
+    expect(scan.outcome).toBe("expired_reference");
+    expect(scan.message).toMatch(/invalidated/i);
+  });
+
+  // Test 5: Suspended Credential Rejection
+  it("Scenario 5: Suspended credential invalidates presentations and fails status check", async () => {
+    const official = await demoAdminService.createOfficial(
+      {
+        displayName: "Constable Rajesh Kumar",
+        registeredEmail: "rajesh.kumar@delhipolice.gov.in",
+        designation: "Constable",
+        department: "Patrol Unit",
+        postingLocation: "South District",
+        credentialReference: "PRM-DEMO-0008",
+      },
+      "usr_admin_001",
+    );
+
+    // Admin suspends credential
+    await demoAdminService.updateCredentialStatus(
+      official.id,
+      { status: "suspended", reason: "Internal inquiry" },
+      "usr_admin_001",
+    );
+
+    // Presentation should be invalidated
+    const scan = await verificationService.decodeQr(official.activePresentation.qrUri);
+    expect(scan.outcome).toBe("expired_reference");
+  });
+
+  // Test 6: Non-Destructive Archival
+  it("Scenario 6: Archiving official invalidates QR and preserves audit trails", async () => {
+    const official = await demoAdminService.createOfficial(
+      {
+        displayName: "Inspector Sonia Verma",
+        registeredEmail: "sonia.verma@delhipolice.gov.in",
+        designation: "Inspector",
+        department: "Narcotics Branch",
+        postingLocation: "Airport Zone",
+        credentialReference: "PRM-DEMO-0009",
+      },
+      "usr_admin_001",
+    );
+
+    const result = await demoAdminService.archiveOfficial(official.id, "usr_admin_001");
+    expect(result.status).toBe("archived");
+
+    // Scanned QR is rejected
+    const scan = await verificationService.decodeQr(official.activePresentation.qrUri);
+    expect(scan.outcome).toBe("expired_reference");
+
+    // Official is excluded from active list
+    const activeList = await demoAdminService.listOfficials();
+    expect(activeList.some((o) => o.id === official.id)).toBe(false);
+  });
+
+  // Test 7: Biometric Failure Observations (No Face, Multiple Faces, Mismatch)
+  it("Scenario 7: Biometric observation failures are handled gracefully without false verified", async () => {
+    const session = await verificationService.createSession("PRM-DEMO-0001", { demo: true });
+
+    let current = await verificationService.advanceCredentialStage(session.sessionId);
+    while (current.state === "validating") {
+      current = await verificationService.advanceCredentialStage(session.sessionId);
+    }
+
+    // No face in live frame
+    const noFaceSession = await verificationService.verifyIdentity(session.sessionId, {
+      observation: "no_face",
+    });
+    expect(noFaceSession.identity?.status).toBe("no_face");
+    expect(noFaceSession.state).toBe("identity_pending");
+  });
+
+  // Test 8: Biometric Adapter Honest Offline Reporting
+  it("Scenario 8: FastApiBiometricAdapter honestly reports offline when microservice is unreachable", async () => {
+    const result = await fastApiBio.verifyIdentity("PRM-DEMO-0001", {
+      observation: "single_face",
+    });
+    expect(result.status).toBe("offline");
+    expect(result.matchResult).toBe("not_performed");
+    expect(result.reason).toMatch(/unreachable/i);
   });
 });

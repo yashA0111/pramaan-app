@@ -5,28 +5,29 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import { eq } from "drizzle-orm";
-import jsQR from "jsqr";
+import { and, desc, eq, not } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { AuditService } from "../audit/audit.service";
 import { StorageService } from "../storage/storage.service";
 import { DatabaseService } from "../../database/database.service";
 import * as schema from "../../database/schema";
 import { GovernmentCredentialAdapter } from "../credentials/government-credential.adapter";
+import { QrPresentationService } from "../qr-presentation/qr-presentation.service";
 import {
   CreateDemoOfficialDto,
+  ExpirePresentationDto,
+  GeneratePresentationDto,
   UpdateCredentialStatusDto,
   UpdateDemoOfficialDto,
 } from "./demo-admin.dto";
 
-const SCHEME_PREFIX = "pramaan://verify/";
 const CREDENTIAL_REFERENCE_PATTERN = /^PRM-[A-Z0-9]{2,8}-\d{4}$/;
 
 @Injectable()
 export class DemoAdminService {
   private readonly logger = new Logger(DemoAdminService.name);
 
-  // In-memory fallback catalog
+  // In-memory fallback catalog for local/test environments
   private readonly memoryOfficials = new Map<string, any>();
   private readonly memoryAssets = new Map<string, any[]>();
 
@@ -34,6 +35,7 @@ export class DemoAdminService {
     private readonly dbService: DatabaseService,
     private readonly storageService: StorageService,
     private readonly auditService: AuditService,
+    private readonly qrPresentationService: QrPresentationService,
     @Optional() private readonly govAdapter?: GovernmentCredentialAdapter,
   ) {}
 
@@ -48,35 +50,52 @@ export class DemoAdminService {
           })
           .from(schema.officials)
           .innerJoin(schema.users, eq(schema.officials.userId, schema.users.id))
-          .leftJoin(schema.credentials, eq(schema.credentials.subjectUserId, schema.users.id));
+          .leftJoin(schema.credentials, eq(schema.credentials.subjectUserId, schema.users.id))
+          .where(not(eq(schema.officials.officialStatus, "deprovisioned")));
 
-        return rows.map((r) => ({
-          id: r.official.id,
-          userId: r.user.id,
-          displayName: r.user.displayName,
-          registeredEmail: r.official.registeredEmail,
-          designation: r.official.designation,
-          department: r.official.department,
-          postingLocation: r.official.postingLocation,
-          employeeReference: r.official.employeeReference,
-          officialStatus: r.official.officialStatus,
-          credential: r.credential
-            ? {
-                id: r.credential.id,
-                reference: r.credential.credentialReference,
-                status: r.credential.status,
-                photoUrl: r.credential.photoUrl,
-                issuedAt: r.credential.issuedAt,
-                expiresAt: r.credential.expiresAt,
-              }
-            : null,
-        }));
+        const officialsList = await Promise.all(
+          rows.map(async (r) => {
+            let activePres: any = null;
+            try {
+              activePres = await this.qrPresentationService.getActivePresentation(r.official.id);
+            } catch {
+              // ignore
+            }
+
+            return {
+              id: r.official.id,
+              userId: r.user.id,
+              displayName: r.user.displayName,
+              registeredEmail: r.official.registeredEmail,
+              designation: r.official.designation,
+              department: r.official.department,
+              postingLocation: r.official.postingLocation,
+              employeeReference: r.official.employeeReference,
+              officialStatus: r.official.officialStatus,
+              credential: r.credential
+                ? {
+                    id: r.credential.id,
+                    reference: r.credential.credentialReference,
+                    status: r.credential.status,
+                    photoUrl: r.credential.photoUrl,
+                    issuedAt: r.credential.issuedAt,
+                    expiresAt: r.credential.expiresAt,
+                  }
+                : null,
+              activePresentation: activePres,
+            };
+          }),
+        );
+
+        return officialsList;
       } catch (err: any) {
         this.logger.warn(`Failed to list officials from DB: ${err.message}`);
       }
     }
 
-    return Array.from(this.memoryOfficials.values());
+    return Array.from(this.memoryOfficials.values()).filter(
+      (off) => off.officialStatus !== "deprovisioned",
+    );
   }
 
   async getOfficial(id: string): Promise<any> {
@@ -101,6 +120,22 @@ export class DemoAdminService {
             .from(schema.demoAssets)
             .where(eq(schema.demoAssets.officialId, id));
 
+          const activePres = await this.qrPresentationService.getActivePresentation(id);
+
+          // Permanent credential QR: stable, derived from credential reference.
+          // Does not change when presentations are regenerated.
+          let permanentQr: { uri: string; qrDataUrl: string } | null = null;
+          if (r.credential) {
+            try {
+              const permResult = await this.qrPresentationService.getPermanentCredentialQr(
+                r.credential.credentialReference,
+              );
+              permanentQr = { uri: permResult.qrUri, qrDataUrl: permResult.qrDataUrl };
+            } catch {
+              // ignore render errors
+            }
+          }
+
           return {
             id: r.official.id,
             userId: r.user.id,
@@ -121,6 +156,10 @@ export class DemoAdminService {
                   expiresAt: r.credential.expiresAt,
                 }
               : null,
+            // Stable permanent QR for physical ID card
+            permanentQr,
+            // Ephemeral presentation for verification session monitoring
+            activePresentation: activePres || null,
             assets: assets.map((a) => ({
               id: a.id,
               assetType: a.assetType,
@@ -144,7 +183,21 @@ export class DemoAdminService {
     }
 
     const assets = this.memoryAssets.get(id) || [];
-    return { ...official, assets };
+    const activePres = await this.qrPresentationService.getActivePresentation(id);
+
+    let permanentQr: { uri: string; qrDataUrl: string } | null = null;
+    if (official.credential) {
+      try {
+        const permResult = await this.qrPresentationService.getPermanentCredentialQr(
+          official.credential.reference,
+        );
+        permanentQr = { uri: permResult.qrUri, qrDataUrl: permResult.qrDataUrl };
+      } catch {
+        // ignore render errors
+      }
+    }
+
+    return { ...official, permanentQr, activePresentation: activePres, assets };
   }
 
   async createOfficial(dto: CreateDemoOfficialDto, adminUserId?: string): Promise<any> {
@@ -213,6 +266,28 @@ export class DemoAdminService {
       }
     }
 
+    // 4. Automatically generate initial active QR Presentation (ephemeral verification presentation)
+    const initialTtl = dto.initialQrTtlMinutes || 15;
+    const presentation = await this.qrPresentationService.generatePresentation(
+      credentialId,
+      officialId,
+      {
+        ttlMinutes: initialTtl,
+        actorUserId: adminUserId,
+        reason: "Initial QR presentation upon credential creation",
+        credentialReference: cleanRef,
+      },
+    );
+
+    // 5. Generate permanent credential QR (stable, suitable for printing on physical ID card)
+    let permanentQr: { uri: string; qrDataUrl: string } | null = null;
+    try {
+      const permResult = await this.qrPresentationService.getPermanentCredentialQr(cleanRef);
+      permanentQr = { uri: permResult.qrUri, qrDataUrl: permResult.qrDataUrl };
+    } catch {
+      // ignore render errors
+    }
+
     const officialRecord = {
       id: officialId,
       userId,
@@ -231,6 +306,10 @@ export class DemoAdminService {
         issuedAt: now.toISOString(),
         expiresAt: expiresAt.toISOString(),
       },
+      // Stable permanent QR suitable for printing on a physical ID card
+      permanentQr,
+      // Ephemeral presentation for the first verification session
+      activePresentation: presentation,
     };
 
     this.memoryOfficials.set(officialId, officialRecord);
@@ -264,7 +343,11 @@ export class DemoAdminService {
       resourceType: "official",
       resourceId: officialId,
       outcome: "success",
-      metadata: { credentialReference: cleanRef, displayName: dto.displayName },
+      metadata: {
+        credentialReference: cleanRef,
+        displayName: dto.displayName,
+        presentationId: presentation.presentationId,
+      },
     });
 
     return officialRecord;
@@ -300,6 +383,17 @@ export class DemoAdminService {
           .update(schema.credentials)
           .set({ status: dto.credentialStatus, updatedAt: new Date() })
           .where(eq(schema.credentials.id, official.credential.id));
+
+        if (
+          dto.credentialStatus === "suspended" ||
+          dto.credentialStatus === "revoked" ||
+          dto.credentialStatus === "archived"
+        ) {
+          await this.qrPresentationService.invalidateByCredentialId(
+            official.credential.id,
+            `Credential marked ${dto.credentialStatus}`,
+          );
+        }
       }
     }
 
@@ -357,6 +451,28 @@ export class DemoAdminService {
         changedAt: new Date(),
         changedBy: adminUserId || "demo_admin",
       });
+
+      if (dto.status === "suspended" || dto.status === "revoked" || dto.status === "archived") {
+        await this.qrPresentationService.invalidateByCredentialId(
+          official.credential.id,
+          dto.reason || `Credential marked ${dto.status}`,
+        );
+      }
+    } else {
+      if (dto.status === "suspended" || dto.status === "revoked" || dto.status === "archived") {
+        await this.qrPresentationService.invalidateByCredentialId(
+          official.credential.id,
+          dto.reason || `Credential marked ${dto.status}`,
+        );
+      }
+    }
+
+    if (this.govAdapter && official.credential) {
+      this.govAdapter.addSyntheticCredential(
+        official.credential.reference,
+        dto.status === "valid" ? "valid" : "revoked",
+        null,
+      );
     }
 
     official.credential.status = dto.status;
@@ -375,43 +491,182 @@ export class DemoAdminService {
     return official;
   }
 
+  /**
+   * Generates a new temporary QR presentation for an official.
+   */
+  async generatePresentation(
+    officialId: string,
+    dto: GeneratePresentationDto = {},
+    adminUserId?: string,
+  ): Promise<any> {
+    const official = await this.getOfficial(officialId);
+    if (!official.credential) {
+      throw new NotFoundException("Official has no linked credential");
+    }
+
+    const ttlMinutes = dto.ttlMinutes || 15;
+    const result = await this.qrPresentationService.generatePresentation(
+      official.credential.id,
+      officialId,
+      {
+        ttlMinutes,
+        actorUserId: adminUserId,
+        reason: "Generated by demo admin operator",
+        credentialReference: official.credential.reference,
+      },
+    );
+
+    await this.auditService.log({
+      actorUserId: adminUserId,
+      actorRole: "demo_admin",
+      action: "QR_PRESENTATION_GENERATED",
+      resourceType: "qr_presentation",
+      resourceId: result.presentationId,
+      outcome: "success",
+      metadata: { officialId, credentialId: official.credential.id, ttlMinutes },
+    });
+
+    return result;
+  }
+
+  /**
+   * Regenerates a temporary QR presentation, invalidating previous active ones.
+   */
+  async regeneratePresentation(
+    officialId: string,
+    dto: GeneratePresentationDto = {},
+    adminUserId?: string,
+  ): Promise<any> {
+    const official = await this.getOfficial(officialId);
+    if (!official.credential) {
+      throw new NotFoundException("Official has no linked credential");
+    }
+
+    const ttlMinutes = dto.ttlMinutes || 15;
+    const result = await this.qrPresentationService.regeneratePresentation(
+      official.credential.id,
+      officialId,
+      {
+        ttlMinutes,
+        actorUserId: adminUserId,
+        reason: "Regenerated by demo admin operator",
+        credentialReference: official.credential.reference,
+      },
+    );
+
+    await this.auditService.log({
+      actorUserId: adminUserId,
+      actorRole: "demo_admin",
+      action: "QR_PRESENTATION_REGENERATED",
+      resourceType: "qr_presentation",
+      resourceId: result.presentationId,
+      outcome: "success",
+      metadata: { officialId, credentialId: official.credential.id, ttlMinutes },
+    });
+
+    return result;
+  }
+
+  /**
+   * Explicitly expires ("Expire Now") the current active presentation for an official.
+   */
+  async expirePresentation(
+    officialId: string,
+    dto: ExpirePresentationDto = {},
+    adminUserId?: string,
+  ): Promise<any> {
+    const active = await this.qrPresentationService.getActivePresentation(officialId);
+    if (!active) {
+      throw new NotFoundException("No active QR presentation found for this official");
+    }
+
+    const reason = dto.reason || "Manually expired by operator";
+    await this.qrPresentationService.expirePresentation(active.id, adminUserId, reason);
+
+    await this.auditService.log({
+      actorUserId: adminUserId,
+      actorRole: "demo_admin",
+      action: "QR_PRESENTATION_EXPIRED_NOW",
+      resourceType: "qr_presentation",
+      resourceId: active.id,
+      outcome: "success",
+      metadata: { officialId, reason },
+    });
+
+    return { success: true, presentationId: active.id, status: "invalidated" };
+  }
+
+  /**
+   * Non-destructively archives/deprovisions an official, preserving historical receipts and audit trails.
+   */
+  async archiveOfficial(officialId: string, adminUserId?: string): Promise<any> {
+    const official = await this.getOfficial(officialId);
+
+    if (this.dbService.db && this.dbService.isConnected) {
+      // 1. Mark official as deprovisioned
+      await this.dbService.db
+        .update(schema.officials)
+        .set({ officialStatus: "deprovisioned", updatedAt: new Date() })
+        .where(eq(schema.officials.id, officialId));
+
+      // 2. Mark credential as archived
+      if (official.credential) {
+        await this.dbService.db
+          .update(schema.credentials)
+          .set({ status: "archived", updatedAt: new Date() })
+          .where(eq(schema.credentials.id, official.credential.id));
+
+        // 3. Invalidate active presentations
+        await this.qrPresentationService.invalidateByCredentialId(
+          official.credential.id,
+          "Official archived from active demo registry",
+        );
+      }
+    } else {
+      if (official.credential) {
+        await this.qrPresentationService.invalidateByCredentialId(
+          official.credential.id,
+          "Official archived from active demo registry",
+        );
+      }
+    }
+
+    if (this.govAdapter && official.credential) {
+      this.govAdapter.addSyntheticCredential(
+        official.credential.reference,
+        "revoked",
+        null,
+      );
+    }
+
+    official.officialStatus = "deprovisioned";
+    if (official.credential) {
+      official.credential.status = "archived";
+    }
+    this.memoryOfficials.set(officialId, official);
+
+    await this.auditService.log({
+      actorUserId: adminUserId,
+      actorRole: "demo_admin",
+      action: "DEMO_OFFICIAL_ARCHIVED",
+      resourceType: "official",
+      resourceId: officialId,
+      outcome: "success",
+      metadata: { officialId, archivedAt: new Date().toISOString() },
+    });
+
+    return { success: true, officialId, status: "archived" };
+  }
+
   /* ----------------------------------------------------- Asset Management */
 
   async uploadAsset(
     officialId: string,
-    assetType: "portrait" | "qr" | "reference_face",
+    assetType: "portrait" | "reference_face",
     file: { buffer: Buffer; originalname: string; mimetype: string },
     adminUserId?: string,
-    qrReferenceOverride?: string,
   ): Promise<any> {
     const official = await this.getOfficial(officialId);
-    const assignedRef = official.credential?.reference || "";
-
-    let encodedReference: string | null = null;
-    let isVerified = false;
-
-    // Validate QR code if asset is QR
-    if (assetType === "qr") {
-      encodedReference = this.extractQrPayload(file.buffer, qrReferenceOverride);
-
-      if (encodedReference) {
-        let parsedRef = encodedReference;
-        if (parsedRef.toLowerCase().startsWith(SCHEME_PREFIX)) {
-          parsedRef = parsedRef.slice(SCHEME_PREFIX.length).split(/[?#/]/)[0]?.toUpperCase() ?? "";
-        }
-
-        if (parsedRef.toUpperCase() !== assignedRef.toUpperCase()) {
-          throw new BadRequestException(
-            `QR payload mismatch: QR contains reference '${parsedRef}', but official is assigned '${assignedRef}'. Association rejected.`,
-          );
-        }
-        isVerified = true;
-      } else {
-        // If image could not be automatically decoded, allow if override was checked or mark verified
-        encodedReference = `pramaan://verify/${assignedRef}`;
-        isVerified = true;
-      }
-    }
 
     const folder = `officials/${officialId}`;
     const filename = `${assetType}_${file.originalname}`;
@@ -434,13 +689,13 @@ export class DemoAdminService {
         mimeType: upload.mimeType,
         fileSize: upload.fileSize,
         checksum: upload.checksum,
-        encodedReference,
-        isVerified,
+        encodedReference: null,
+        isVerified: true,
         createdAt: now,
         updatedAt: now,
       });
 
-      // Update portrait url on credential if portrait
+      // Update portrait URL on credential if portrait
       if (assetType === "portrait" && official.credential) {
         await this.dbService.db
           .update(schema.credentials)
@@ -453,11 +708,10 @@ export class DemoAdminService {
       id: assetId,
       assetType,
       storagePath: upload.storagePath,
-      publicUrl: assetType === "reference_face" ? undefined : upload.publicUrl, // Protected face
+      publicUrl: assetType === "reference_face" ? undefined : upload.publicUrl,
       mimeType: upload.mimeType,
       fileSize: upload.fileSize,
-      encodedReference,
-      isVerified,
+      isVerified: true,
       createdAt: now.toISOString(),
     };
 
@@ -472,26 +726,31 @@ export class DemoAdminService {
       resourceType: "demo_asset",
       resourceId: assetId,
       outcome: "success",
-      metadata: { officialId, assetType, storagePath: upload.storagePath, isVerified },
+      metadata: { officialId, assetType, storagePath: upload.storagePath },
     });
 
     return assetRecord;
   }
 
-  private extractQrPayload(buffer: Buffer, override?: string): string | null {
-    if (override) return override;
-
-    try {
-      // Check if text payload is directly stored in buffer (e.g. SVG or raw text)
-      const textSample = buffer.toString("utf-8");
-      if (textSample.includes("pramaan://verify/") || textSample.includes("PRM-")) {
-        const match = textSample.match(/pramaan:\/\/verify\/[A-Z0-9-]+/i) || textSample.match(/PRM-[A-Z0-9-昔]+/i);
-        if (match) return match[0];
-      }
-    } catch {
-      // ignore
+  /**
+   * Returns the permanent credential QR for an official.
+   *
+   * This QR is STABLE — derived from the credential reference.
+   * It does not expire, does not change across verification sessions,
+   * and is suitable for printing on a physical ID card.
+   *
+   * Scanning this QR identifies the credential; it does NOT itself verify the holder.
+   */
+  async getCredentialQr(officialId: string): Promise<{
+    credentialReference: string;
+    qrUri: string;
+    qrDataUrl: string;
+  }> {
+    const official = await this.getOfficial(officialId);
+    if (!official.credential) {
+      throw new NotFoundException("Official has no linked credential");
     }
 
-    return null;
+    return this.qrPresentationService.getPermanentCredentialQr(official.credential.reference);
   }
 }

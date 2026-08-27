@@ -214,7 +214,8 @@ export class GovernmentCredentialAdapter implements GovernmentCredentialPort {
           if (cred.status === "invalid") outcome = "invalid";
           else if (cred.status === "expired" || new Date(cred.expiresAt).getTime() < Date.now())
             outcome = "expired";
-          else if (cred.status === "revoked") outcome = "revoked";
+          else if (cred.status === "revoked" || cred.status === "suspended" || off?.officialStatus === "suspended" || cred.status === "archived")
+            outcome = "revoked";
           else if (cred.status === "unknown") outcome = "unavailable";
 
           const summary: CredentialSummary | null =
@@ -236,13 +237,15 @@ export class GovernmentCredentialAdapter implements GovernmentCredentialPort {
                     registry: "demo",
                   },
                   registryStatus:
-                    outcome === "valid"
-                      ? "active"
-                      : outcome === "expired"
-                        ? "expired"
-                        : outcome === "revoked"
-                          ? "revoked"
-                          : "unknown",
+                    cred.status === "suspended" || off?.officialStatus === "suspended"
+                      ? "suspended"
+                      : outcome === "valid"
+                        ? "active"
+                        : outcome === "expired"
+                          ? "expired"
+                          : outcome === "revoked"
+                            ? "revoked"
+                            : "unknown",
                   synthetic: true,
                 };
 

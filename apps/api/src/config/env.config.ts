@@ -1,9 +1,16 @@
 import * as dotenv from "dotenv";
+import * as fs from "fs";
 import * as path from "path";
 
-// Load root .env first, then local api .env if present
-dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
-dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+// Find the repository environment file regardless of whether the API is
+// launched from the workspace root or from apps/api.
+for (const envPath of [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(process.cwd(), "..", ".env"),
+  path.resolve(process.cwd(), "..", "..", ".env"),
+]) {
+  if (fs.existsSync(envPath)) dotenv.config({ path: envPath });
+}
 
 export interface AppConfig {
   nodeEnv: string;

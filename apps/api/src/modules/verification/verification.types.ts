@@ -133,6 +133,11 @@ export type FinalTrustState =
   | "not_verified";
 
 export interface TrustReceiptViewModel {
+  receiptId?: string;
+  receiptHash?: string;
+  signature?: string;
+  signingKeyId?: string;
+  signingAlgorithm?: string;
   sessionId: string;
   credentialReference: string;
   subject: CredentialSummary | null;
@@ -168,4 +173,11 @@ export interface QrScanResult {
   message: string;
   demo: boolean;
   scannedAt: string;
+  /**
+   * Diagnostic discriminant indicating the QR format that was scanned.
+   * - permanent_credential: pramaan://credential/<ref> — printed on physical ID cards, stable
+   * - ephemeral_presentation: pramaan://verify/v1/<token> — server-generated, short-lived
+   * - legacy_reference: pramaan://verify/<ref> or bare ref — legacy/dev path
+   */
+  qrFormat?: "permanent_credential" | "ephemeral_presentation" | "legacy_reference";
 }

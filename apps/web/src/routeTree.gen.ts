@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/app'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as OfficialRouteImport } from './routes/official'
+import { Route as AdminDemoRouteImport } from './routes/admin.demo'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppActivityRouteImport } from './routes/app.activity'
 import { Route as AppSafetyRouteImport } from './routes/app.safety'
@@ -21,6 +23,7 @@ import { Route as AppSafetyPoliceRouteImport } from './routes/app.safety.police'
 import { Route as AppSafetySosRouteImport } from './routes/app.safety.sos'
 import { Route as AppVerifyIndexRouteImport } from './routes/app.verify.index'
 import { Route as AppVerifyScanRouteImport } from './routes/app.verify.scan'
+import { Route as DemoIdCardOfficialIdRouteImport } from './routes/demo.id-card.$officialId'
 import { Route as AppSafetyPoliceIdRouteImport } from './routes/app.safety.police.$id'
 import { Route as AppVerifyReceiptIdRouteImport } from './routes/app.verify.receipt.$id'
 import { Route as AppVerifySessionIdRouteImport } from './routes/app.verify.session.$id'
@@ -35,9 +38,19 @@ const AppRoute = AppRouteImport.update({
   path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OfficialRoute = OfficialRouteImport.update({
   id: '/official',
   path: '/official',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminDemoRoute = AdminDemoRouteImport.update({
+  id: '/admin/demo',
+  path: '/admin/demo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -85,6 +98,11 @@ const AppVerifyScanRoute = AppVerifyScanRouteImport.update({
   path: '/scan',
   getParentRoute: () => AppVerifyRoute,
 } as any)
+const DemoIdCardOfficialIdRoute = DemoIdCardOfficialIdRouteImport.update({
+  id: '/demo/id-card/$officialId',
+  path: '/demo/id-card/$officialId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppSafetyPoliceIdRoute = AppSafetyPoliceIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -104,7 +122,9 @@ const AppVerifySessionIdRoute = AppVerifySessionIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
   '/official': typeof OfficialRoute
+  '/admin/demo': typeof AdminDemoRoute
   '/app/activity': typeof AppActivityRoute
   '/app/safety': typeof AppSafetyRouteWithChildren
   '/app/verify': typeof AppVerifyRouteWithChildren
@@ -112,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/app/safety/police': typeof AppSafetyPoliceRouteWithChildren
   '/app/safety/sos': typeof AppSafetySosRoute
   '/app/verify/scan': typeof AppVerifyScanRoute
+  '/demo/id-card/$officialId': typeof DemoIdCardOfficialIdRoute
   '/app/safety/': typeof AppSafetyIndexRoute
   '/app/verify/': typeof AppVerifyIndexRoute
   '/app/safety/police/$id': typeof AppSafetyPoliceIdRoute
@@ -120,12 +141,15 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/official': typeof OfficialRoute
+  '/admin/demo': typeof AdminDemoRoute
   '/app/activity': typeof AppActivityRoute
   '/app': typeof AppIndexRoute
   '/app/safety/police': typeof AppSafetyPoliceRouteWithChildren
   '/app/safety/sos': typeof AppSafetySosRoute
   '/app/verify/scan': typeof AppVerifyScanRoute
+  '/demo/id-card/$officialId': typeof DemoIdCardOfficialIdRoute
   '/app/safety': typeof AppSafetyIndexRoute
   '/app/verify': typeof AppVerifyIndexRoute
   '/app/safety/police/$id': typeof AppSafetyPoliceIdRoute
@@ -136,7 +160,9 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
   '/official': typeof OfficialRoute
+  '/admin/demo': typeof AdminDemoRoute
   '/app/activity': typeof AppActivityRoute
   '/app/safety': typeof AppSafetyRouteWithChildren
   '/app/verify': typeof AppVerifyRouteWithChildren
@@ -144,6 +170,7 @@ export interface FileRoutesById {
   '/app/safety/police': typeof AppSafetyPoliceRouteWithChildren
   '/app/safety/sos': typeof AppSafetySosRoute
   '/app/verify/scan': typeof AppVerifyScanRoute
+  '/demo/id-card/$officialId': typeof DemoIdCardOfficialIdRoute
   '/app/safety/': typeof AppSafetyIndexRoute
   '/app/verify/': typeof AppVerifyIndexRoute
   '/app/safety/police/$id': typeof AppSafetyPoliceIdRoute
@@ -155,7 +182,9 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/app'
+    | '/login'
     | '/official'
+    | '/admin/demo'
     | '/app/activity'
     | '/app/safety'
     | '/app/verify'
@@ -163,6 +192,7 @@ export interface FileRouteTypes {
     | '/app/safety/police'
     | '/app/safety/sos'
     | '/app/verify/scan'
+    | '/demo/id-card/$officialId'
     | '/app/safety/'
     | '/app/verify/'
     | '/app/safety/police/$id'
@@ -171,12 +201,15 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/login'
     | '/official'
+    | '/admin/demo'
     | '/app/activity'
     | '/app'
     | '/app/safety/police'
     | '/app/safety/sos'
     | '/app/verify/scan'
+    | '/demo/id-card/$officialId'
     | '/app/safety'
     | '/app/verify'
     | '/app/safety/police/$id'
@@ -186,7 +219,9 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/app'
+    | '/login'
     | '/official'
+    | '/admin/demo'
     | '/app/activity'
     | '/app/safety'
     | '/app/verify'
@@ -194,6 +229,7 @@ export interface FileRouteTypes {
     | '/app/safety/police'
     | '/app/safety/sos'
     | '/app/verify/scan'
+    | '/demo/id-card/$officialId'
     | '/app/safety/'
     | '/app/verify/'
     | '/app/safety/police/$id'
@@ -204,7 +240,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  LoginRoute: typeof LoginRoute
   OfficialRoute: typeof OfficialRoute
+  AdminDemoRoute: typeof AdminDemoRoute
+  DemoIdCardOfficialIdRoute: typeof DemoIdCardOfficialIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -223,11 +262,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/official': {
       id: '/official'
       path: '/official'
       fullPath: '/official'
       preLoaderRoute: typeof OfficialRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/demo': {
+      id: '/admin/demo'
+      path: '/admin/demo'
+      fullPath: '/admin/demo'
+      preLoaderRoute: typeof AdminDemoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/': {
@@ -292,6 +345,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/verify/scan'
       preLoaderRoute: typeof AppVerifyScanRouteImport
       parentRoute: typeof AppVerifyRoute
+    }
+    '/demo/id-card/$officialId': {
+      id: '/demo/id-card/$officialId'
+      path: '/demo/id-card/$officialId'
+      fullPath: '/demo/id-card/$officialId'
+      preLoaderRoute: typeof DemoIdCardOfficialIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/app/safety/police/$id': {
       id: '/app/safety/police/$id'
@@ -382,7 +442,10 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  LoginRoute: LoginRoute,
   OfficialRoute: OfficialRoute,
+  AdminDemoRoute: AdminDemoRoute,
+  DemoIdCardOfficialIdRoute: DemoIdCardOfficialIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

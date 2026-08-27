@@ -1,26 +1,5 @@
 services:
   # ----------------------------------------------------------------------------
-  # PostgreSQL (Optional local development database if not using Supabase)
-  # ----------------------------------------------------------------------------
-  postgres:
-    image: postgres:16-alpine
-    container_name: pramaan-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: pramaan
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # ----------------------------------------------------------------------------
   # NestJS Authoritative API Service
   # ----------------------------------------------------------------------------
   api:
@@ -34,16 +13,27 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/pramaan
-      DIRECT_DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/pramaan
-      SESSION_SECRET: pramaan-docker-dev-session-secret-min32chars
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL:-${DATABASE_URL}}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN in .env}
+      DEMO_ADMIN_EMAILS: ${DEMO_ADMIN_EMAILS:?Set DEMO_ADMIN_EMAILS in .env}
+      DEMO_ADMIN_API_KEY: ${DEMO_ADMIN_API_KEY:?Set DEMO_ADMIN_API_KEY in .env}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-pramaan-demo-assets}
       BIOMETRIC_SERVICE_URL: http://biometrics:8000
-      DEMO_ADMIN_EMAILS: admin@pramaan.dev,demo-admin@pramaan.dev
+      BIOMETRIC_SERVICE_TOKEN: ${BIOMETRIC_SERVICE_TOKEN:-}
     depends_on:
-      postgres:
-        condition: service_healthy
       biometrics:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/v1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
   # ----------------------------------------------------------------------------
   # Python FastAPI + ONNX Biometric Verification Microservice
@@ -54,11 +44,27 @@ services:
       dockerfile: Dockerfile
     container_name: pramaan-biometrics
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     environment:
       PYTHONUNBUFFERED: "1"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
-volumes:
-  pgdata:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:?Set VITE_API_URL in .env}
+        VITE_USE_MOCK: ${VITE_USE_MOCK:-false}
+    container_name: pramaan-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
 

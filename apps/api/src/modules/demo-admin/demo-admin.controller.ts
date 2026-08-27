@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Param,
@@ -23,6 +24,8 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { StorageService } from "../storage/storage.service";
 import {
   CreateDemoOfficialDto,
+  ExpirePresentationDto,
+  GeneratePresentationDto,
   UpdateCredentialStatusDto,
   UpdateDemoOfficialDto,
 } from "./demo-admin.dto";
@@ -74,7 +77,7 @@ export class DemoAdminController {
 
   @Patch("officials/:id/status")
   @Roles("demo_admin")
-  @ApiOperation({ summary: "Enable / disable / revoke credential status" })
+  @ApiOperation({ summary: "Update credential status (valid, suspended, revoked, expired, archived)" })
   async updateStatus(
     @Param("id") id: string,
     @Body() body: UpdateCredentialStatusDto,
@@ -83,23 +86,89 @@ export class DemoAdminController {
     return this.demoAdminService.updateCredentialStatus(id, body, user?.id);
   }
 
+  @Get("officials/:id/qr/permanent")
+  @Roles("demo_admin")
+  @ApiOperation({
+    summary: "Get stable permanent credential QR for an official's physical ID card",
+    description:
+      "Returns the canonical permanent credential QR (pramaan://credential/<ref>). " +
+      "This QR is STABLE \u2014 it does not expire and does not change when verification " +
+      "presentations are regenerated. Suitable for printing on a physical ID card.",
+  })
+  async getPermanentQr(@Param("id") id: string): Promise<any> {
+    return this.demoAdminService.getCredentialQr(id);
+  }
+
+  @Post("officials/:id/qr/generate")
+  @Roles("demo_admin")
+  @ApiOperation({
+    summary: "Generate a new ephemeral verification presentation (short-lived)",
+    description:
+      "Creates a short-lived ephemeral verification presentation token (pramaan://verify/v1/<token>). " +
+      "This is NOT the physical ID card QR \u2014 it is used for monitored verification sessions. " +
+      "The permanent credential QR (pramaan://credential/<ref>) is separate and unaffected.",
+  })
+  async generateQr(
+    @Param("id") id: string,
+    @Body() body: GeneratePresentationDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<any> {
+    return this.demoAdminService.generatePresentation(id, body, user?.id);
+  }
+
+  @Post("officials/:id/qr/regenerate")
+  @Roles("demo_admin")
+  @ApiOperation({
+    summary: "Regenerate ephemeral verification presentation (invalidates previous)",
+    description:
+      "Regenerates the short-lived ephemeral verification presentation, invalidating any prior active one. " +
+      "The permanent credential QR (pramaan://credential/<ref>) is unaffected.",
+  })
+  async regenerateQr(
+    @Param("id") id: string,
+    @Body() body: GeneratePresentationDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<any> {
+    return this.demoAdminService.regeneratePresentation(id, body, user?.id);
+  }
+
+  @Post("officials/:id/qr/expire")
+  @Roles("demo_admin")
+  @ApiOperation({ summary: "Immediately invalidate current active ephemeral verification presentation" })
+  async expireQr(
+    @Param("id") id: string,
+    @Body() body: ExpirePresentationDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<any> {
+    return this.demoAdminService.expirePresentation(id, body, user?.id);
+  }
+
+  @Delete("officials/:id")
+  @Roles("demo_admin")
+  @ApiOperation({ summary: "Non-destructively archive official from active registry" })
+  async archiveOfficial(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<any> {
+    return this.demoAdminService.archiveOfficial(id, user?.id);
+  }
+
   @Post("officials/:id/assets")
   @Roles("demo_admin")
   @UseInterceptors(FileInterceptor("file"))
   @ApiConsumes("multipart/form-data")
-  @ApiOperation({ summary: "Upload portrait, QR code, or reference face asset" })
+  @ApiOperation({ summary: "Upload portrait or reference face asset" })
   async uploadAsset(
     @Param("id") id: string,
     @UploadedFile() file: any,
-    @Body("assetType") assetType: "portrait" | "qr" | "reference_face",
-    @Body("qrReference") qrReference: string,
+    @Body("assetType") assetType: "portrait" | "reference_face",
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<any> {
     if (!file) {
       throw new BadRequestException("File is required for asset upload");
     }
-    if (!["portrait", "qr", "reference_face"].includes(assetType)) {
-      throw new BadRequestException("Invalid assetType. Must be 'portrait', 'qr', or 'reference_face'");
+    if (!["portrait", "reference_face"].includes(assetType)) {
+      throw new BadRequestException("Invalid assetType. Must be 'portrait' or 'reference_face'");
     }
 
     return this.demoAdminService.uploadAsset(
@@ -111,7 +180,6 @@ export class DemoAdminController {
         mimetype: file.mimetype,
       },
       user?.id,
-      qrReference,
     );
   }
 }
@@ -122,7 +190,7 @@ export class DemoAssetFilesController {
   constructor(private readonly storageService: StorageService) {}
 
   @Get("files/:officialId/:filename")
-  @ApiOperation({ summary: "Serve public demo asset files (portraits, QRs)" })
+  @ApiOperation({ summary: "Serve public demo asset files (portraits)" })
   async getOfficialAsset(
     @Param("officialId") officialId: string,
     @Param("filename") filename: string,

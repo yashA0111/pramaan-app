@@ -200,6 +200,11 @@ export type FinalTrustState =
   | "not_verified";
 
 export interface TrustReceiptViewModel {
+  receiptId?: string;
+  receiptHash?: string;
+  signature?: string;
+  signingKeyId?: string;
+  signingAlgorithm?: string;
   sessionId: string;
   credentialReference: string;
   subject: CredentialSummary | null;

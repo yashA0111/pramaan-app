@@ -68,6 +68,7 @@ async function bootstrap() {
       "x-user-role",
       "x-user-email",
       "x-user-name",
+      "x-demo-admin-key",
       "x-request-id",
       "x-correlation-id",
     ],
@@ -111,7 +112,7 @@ async function bootstrap() {
   }
 
   const port = config.port;
-  await app.listen(port);
+  await app.listen(port, "0.0.0.0");
 
   logger.log(`🚀 Pramaan API is running on http://localhost:${port}/api/v1`);
   logger.log(`📚 OpenAPI documentation available at http://localhost:${port}/api/v1/docs`);
