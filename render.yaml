@@ -1,0 +1,64 @@
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Authoritative NestJS Backend API
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: pramaan-api
+    env: node
+    plan: free
+    rootDir: apps/api
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DEMO_ADMIN_EMAILS
+        value: admin@pramaan.dev,demo-admin@pramaan.dev
+      - key: DEMO_ADMIN_API_KEY
+        generateValue: true
+      - key: STORAGE_DRIVER
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: pramaan-demo-assets
+      - key: BIOMETRIC_SERVICE_URL
+        fromService:
+          type: web
+          name: pramaan-biometrics
+          property: host
+      - key: BIOMETRIC_SERVICE_TOKEN
+        fromService:
+          type: web
+          name: pramaan-biometrics
+          envVarKey: BIOMETRIC_SERVICE_TOKEN
+
+  # ----------------------------------------------------------------------------
+  # 2. Python FastAPI + ONNX Biometrics Microservice
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: pramaan-biometrics
+    env: docker
+    plan: free
+    rootDir: services/biometric
+    dockerfilePath: Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: BIOMETRIC_SERVICE_TOKEN
+        generateValue: true
