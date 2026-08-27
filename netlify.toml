@@ -1,6 +1,6 @@
 [build]
   command = "bun run --cwd apps/web build"
-  publish = "apps/web/.output/public"
+  publish = "apps/web/dist"
 
 [build.environment]
   NODE_VERSION = "20"

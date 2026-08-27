@@ -14,6 +14,12 @@ coverage/
 *.log
 uploads/
 tmp/
+certs/*
+!certs/.gitkeep
+*.pem
+*.key
+*.crt
+*.pfx
 .DS_Store
 Thumbs.db
 

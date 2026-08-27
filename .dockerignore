@@ -13,5 +13,9 @@
 **/coverage
 **/models
 **/uploads
+certs
+*.pem
+*.key
+*.crt
 *.log
 *.md

@@ -4,7 +4,7 @@
   "description": "Pramaan NestJS Backend Application",
   "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node -e \"const fs=require('fs'); if(fs.existsSync('src/database/migrations')) fs.cpSync('src/database/migrations', 'dist/database/migrations', { recursive: true, force: true });\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
