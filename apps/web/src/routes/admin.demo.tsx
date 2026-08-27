@@ -945,49 +945,49 @@ function CredentialWorkspace({
 
             {detailsLoading && <p className="mt-4 text-metadata text-foreground-subtle">Refreshing assets…</p>}
           </div>
-
-          {/* Danger Zone: Archival & Permanent Deletion */}
-          <div className="border-t border-border p-5 md:p-6 bg-danger-soft/10 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-4">
-              <div className="max-w-xl">
-                <h4 className="text-body-sm font-semibold text-danger flex items-center gap-1.5">
-                  <ShieldAlert className="size-4" /> Non-Destructive Archival
-                </h4>
-                <p className="mt-1 text-metadata text-foreground-muted">
-                  Deactivate official from the active demo registry while preserving historical logs and trust receipts.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={onArchive}
-                className="inline-flex min-h-10 items-center gap-2 border border-danger/40 bg-surface px-4 text-body-sm font-semibold text-danger hover:bg-danger-soft/30 transition-colors"
-              >
-                <Archive className="size-4" /> Archive Official
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="max-w-xl">
-                <h4 className="text-body-sm font-semibold text-danger flex items-center gap-1.5">
-                  <Trash2 className="size-4" /> Permanent Delete from DB
-                </h4>
-                <p className="mt-1 text-metadata text-foreground-muted">
-                  Completely removes this official, credentials, reference biometric face, and presentations from the database and storage. Frees up the Credential Reference and Email so you can recreate this profile without unique constraint conflicts.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={onPurge}
-                className="inline-flex min-h-10 items-center gap-2 rounded-md bg-danger px-4 text-body-sm font-semibold text-danger-foreground hover:bg-danger/90 transition-colors"
-              >
-                <Trash2 className="size-4" /> Delete from DB
-              </button>
-            </div>
-          </div>
         </>
       ) : (
         <EmptyCredentialBody />
       )}
+
+      {/* Danger Zone: Archival & Permanent Deletion (Always available) */}
+      <div className="border-t border-border p-5 md:p-6 bg-danger-soft/10 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-4">
+          <div className="max-w-xl">
+            <h4 className="text-body-sm font-semibold text-danger flex items-center gap-1.5">
+              <ShieldAlert className="size-4" /> Non-Destructive Archival
+            </h4>
+            <p className="mt-1 text-metadata text-foreground-muted">
+              Deactivate official from the active demo registry while preserving historical logs and trust receipts.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onArchive}
+            className="inline-flex min-h-10 items-center gap-2 border border-danger/40 bg-surface px-4 text-body-sm font-semibold text-danger hover:bg-danger-soft/30 transition-colors"
+          >
+            <Archive className="size-4" /> Archive Official
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="max-w-xl">
+            <h4 className="text-body-sm font-semibold text-danger flex items-center gap-1.5">
+              <Trash2 className="size-4" /> Permanent Delete from DB
+            </h4>
+            <p className="mt-1 text-metadata text-foreground-muted">
+              Completely removes this official, credentials, reference biometric face, and presentations from the database and storage. Frees up the Credential Reference and Email so you can recreate this profile without unique constraint conflicts.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onPurge}
+            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-danger px-4 text-body-sm font-semibold text-danger-foreground hover:bg-danger/90 transition-colors"
+          >
+            <Trash2 className="size-4" /> Delete from DB
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

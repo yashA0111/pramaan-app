@@ -145,12 +145,12 @@ export class DemoAdminController {
 
   @Delete("officials/:id")
   @Roles("demo_admin")
-  @ApiOperation({ summary: "Non-destructively archive official from active registry" })
-  async archiveOfficial(
+  @ApiOperation({ summary: "Completely delete official, credentials, assets, and user records from database" })
+  async deleteOfficial(
     @Param("id") id: string,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<any> {
-    return this.demoAdminService.archiveOfficial(id, user?.id);
+    return this.demoAdminService.purgeOfficial(id, user?.id);
   }
 
   @Delete("officials/:id/purge")

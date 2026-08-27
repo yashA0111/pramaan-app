@@ -671,20 +671,38 @@ export class DemoAdminService {
    * so the same profile can be added again in the future with no conflicts.
    */
   async purgeOfficial(officialId: string, adminUserId?: string): Promise<any> {
-    let official: any = null;
-    try {
-      official = await this.getOfficial(officialId);
-    } catch {
-      // ignore if already partially deleted
-    }
-
-    const credRef = official?.credential?.credentialReference || official?.credential?.reference;
-    const credId = official?.credential?.id;
-    const userId = official?.user?.id || official?.userId;
+    let credRef: string | undefined;
+    let credIds: string[] = [];
+    let userId: string | undefined;
+    let registeredEmail: string | undefined;
 
     if (this.dbService.db && this.dbService.isConnected) {
       try {
-        // 1. Delete asset files from storage & demo_assets
+        // 1. Resolve official and user records directly
+        const [officialRow] = await this.dbService.db
+          .select()
+          .from(schema.officials)
+          .where(eq(schema.officials.id, officialId));
+
+        if (officialRow) {
+          userId = officialRow.userId;
+          registeredEmail = officialRow.registeredEmail;
+        }
+
+        // Also resolve credentials linked to this user or official
+        if (userId) {
+          const userCreds = await this.dbService.db
+            .select()
+            .from(schema.credentials)
+            .where(eq(schema.credentials.subjectUserId, userId));
+
+          for (const c of userCreds) {
+            credIds.push(c.id);
+            if (!credRef) credRef = c.credentialReference;
+          }
+        }
+
+        // 2. Delete asset files from storage & demo_assets
         const assets = await this.dbService.db
           .select()
           .from(schema.demoAssets)
@@ -704,48 +722,60 @@ export class DemoAdminService {
           .delete(schema.demoAssets)
           .where(eq(schema.demoAssets.officialId, officialId));
 
-        // 2. Delete QR presentations
+        // 3. Delete QR presentations
         await this.dbService.db
           .delete(schema.qrPresentations)
           .where(eq(schema.qrPresentations.officialId, officialId));
 
-        if (credId) {
+        for (const cId of credIds) {
           await this.dbService.db
             .delete(schema.qrPresentations)
-            .where(eq(schema.qrPresentations.credentialId, credId));
+            .where(eq(schema.qrPresentations.credentialId, cId));
 
-          // 3. Delete credential status history
+          // 4. Delete credential status history
           await this.dbService.db
             .delete(schema.credentialStatusHistory)
-            .where(eq(schema.credentialStatusHistory.credentialId, credId));
+            .where(eq(schema.credentialStatusHistory.credentialId, cId));
 
-          // 4. Update verification sessions to unlink credentialId
+          // 5. Update verification sessions to unlink credentialId
           await this.dbService.db
             .update(schema.verificationSessions)
             .set({ credentialId: null })
-            .where(eq(schema.verificationSessions.credentialId, credId));
+            .where(eq(schema.verificationSessions.credentialId, cId));
 
-          // 5. Delete credential
+          // 6. Delete credential
           await this.dbService.db
             .delete(schema.credentials)
-            .where(eq(schema.credentials.id, credId));
+            .where(eq(schema.credentials.id, cId));
         }
 
-        // 6. Delete confirmation requests for this official
+        if (userId) {
+          await this.dbService.db
+            .delete(schema.credentials)
+            .where(eq(schema.credentials.subjectUserId, userId));
+        }
+
+        // 7. Delete confirmation requests for this official
         await this.dbService.db
           .delete(schema.officialConfirmationRequests)
           .where(eq(schema.officialConfirmationRequests.officialId, officialId));
 
-        // 7. Delete official
+        // 8. Delete official
         await this.dbService.db
           .delete(schema.officials)
           .where(eq(schema.officials.id, officialId));
 
-        // 8. Delete user record if it exists
+        // 9. Delete user record if it exists
         if (userId) {
           await this.dbService.db
             .delete(schema.users)
             .where(eq(schema.users.id, userId));
+        }
+
+        if (registeredEmail) {
+          await this.dbService.db
+            .delete(schema.users)
+            .where(eq(schema.users.email, registeredEmail));
         }
       } catch (err: any) {
         this.logger.error(`Database purge failed for official ${officialId}: ${err.message}`);
