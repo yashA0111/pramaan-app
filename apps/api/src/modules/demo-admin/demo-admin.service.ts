@@ -658,6 +658,121 @@ export class DemoAdminService {
     return { success: true, officialId, status: "archived" };
   }
 
+  /**
+   * Permanently deletes an official and all associated records from the database and storage:
+   * - demo assets (and their storage files)
+   * - ephemeral QR presentations
+   * - credential status history
+   * - credentials
+   * - confirmation requests
+   * - officials
+   * - synthetic user record
+   * This completely clears the uniqueness constraints (email, credentialReference, employeeReference)
+   * so the same profile can be added again in the future with no conflicts.
+   */
+  async purgeOfficial(officialId: string, adminUserId?: string): Promise<any> {
+    let official: any = null;
+    try {
+      official = await this.getOfficial(officialId);
+    } catch {
+      // ignore if already partially deleted
+    }
+
+    const credRef = official?.credential?.credentialReference || official?.credential?.reference;
+    const credId = official?.credential?.id;
+    const userId = official?.user?.id || official?.userId;
+
+    if (this.dbService.db && this.dbService.isConnected) {
+      try {
+        // 1. Delete asset files from storage & demo_assets
+        const assets = await this.dbService.db
+          .select()
+          .from(schema.demoAssets)
+          .where(eq(schema.demoAssets.officialId, officialId));
+
+        for (const asset of assets) {
+          if (asset.storagePath) {
+            try {
+              await this.storageService.deleteFile(asset.storagePath);
+            } catch (err: any) {
+              this.logger.warn(`Could not delete storage file ${asset.storagePath}: ${err.message}`);
+            }
+          }
+        }
+
+        await this.dbService.db
+          .delete(schema.demoAssets)
+          .where(eq(schema.demoAssets.officialId, officialId));
+
+        // 2. Delete QR presentations
+        await this.dbService.db
+          .delete(schema.qrPresentations)
+          .where(eq(schema.qrPresentations.officialId, officialId));
+
+        if (credId) {
+          await this.dbService.db
+            .delete(schema.qrPresentations)
+            .where(eq(schema.qrPresentations.credentialId, credId));
+
+          // 3. Delete credential status history
+          await this.dbService.db
+            .delete(schema.credentialStatusHistory)
+            .where(eq(schema.credentialStatusHistory.credentialId, credId));
+
+          // 4. Update verification sessions to unlink credentialId
+          await this.dbService.db
+            .update(schema.verificationSessions)
+            .set({ credentialId: null })
+            .where(eq(schema.verificationSessions.credentialId, credId));
+
+          // 5. Delete credential
+          await this.dbService.db
+            .delete(schema.credentials)
+            .where(eq(schema.credentials.id, credId));
+        }
+
+        // 6. Delete confirmation requests for this official
+        await this.dbService.db
+          .delete(schema.officialConfirmationRequests)
+          .where(eq(schema.officialConfirmationRequests.officialId, officialId));
+
+        // 7. Delete official
+        await this.dbService.db
+          .delete(schema.officials)
+          .where(eq(schema.officials.id, officialId));
+
+        // 8. Delete user record if it exists
+        if (userId) {
+          await this.dbService.db
+            .delete(schema.users)
+            .where(eq(schema.users.id, userId));
+        }
+      } catch (err: any) {
+        this.logger.error(`Database purge failed for official ${officialId}: ${err.message}`);
+        throw new BadRequestException(`Failed to purge official from database: ${err.message}`);
+      }
+    }
+
+    // Clear in-memory caches
+    this.memoryOfficials.delete(officialId);
+    this.memoryAssets.delete(officialId);
+    if (credRef && this.govAdapter) {
+      this.govAdapter.removeSyntheticCredential(credRef);
+    }
+
+    await this.auditService.log({
+      actorUserId: adminUserId,
+      actorRole: "demo_admin",
+      action: "DEMO_OFFICIAL_PURGED",
+      resourceType: "official",
+      resourceId: officialId,
+      outcome: "success",
+      metadata: { officialId, credentialReference: credRef, purgedAt: new Date().toISOString() },
+    });
+
+    return { success: true, officialId, status: "purged" };
+  }
+
   /* ----------------------------------------------------- Asset Management */
 
   async uploadAsset(

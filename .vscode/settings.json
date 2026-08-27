@@ -1,0 +1,7 @@
+{
+  "python.defaultInterpreterPath": "services/biometric/.venv/Scripts/python.exe",
+  "python.analysis.extraPaths": [
+    "services/biometric",
+    "services/biometric/.venv/Lib/site-packages"
+  ]
+}

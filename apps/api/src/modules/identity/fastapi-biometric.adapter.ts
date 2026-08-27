@@ -24,16 +24,22 @@ export class FastApiBiometricAdapter implements BiometricPort {
       return this.fallbackAdapter.verifyIdentity(credentialReference, input);
     }
 
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutMs = config.biometricTimeoutMs || 30000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const startTime = Date.now();
 
+    try {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
       if (config.biometricServiceToken) {
         headers["Authorization"] = `Bearer ${config.biometricServiceToken}`;
       }
+
+      this.logger.log(
+        `Dispatching face verification for ${credentialReference} to ${serviceUrl}/verify-face (timeout: ${timeoutMs}ms)`,
+      );
 
       const response = await fetch(`${serviceUrl}/verify-face`, {
         method: "POST",
@@ -43,15 +49,18 @@ export class FastApiBiometricAdapter implements BiometricPort {
           observation: input.observation,
           quality: input.quality ?? 1.0,
           captured_frame: input.capturedFrameBase64,
-          reference_photo: input.referencePhotoPath,
+          reference_photo: input.referencePhotoBase64,
         }),
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
+      const elapsed = Date.now() - startTime;
 
       if (response.ok) {
         const data = await response.json();
+        this.logger.log(
+          `Biometric verification completed for ${credentialReference} in ${elapsed}ms: ${data.match_result} (${data.status})`,
+        );
         return {
           status: data.status,
           matchResult: data.match_result,
@@ -61,7 +70,9 @@ export class FastApiBiometricAdapter implements BiometricPort {
           reason: data.reason || "Biometric comparison completed.",
         };
       } else {
-        this.logger.warn(`Biometric microservice returned HTTP ${response.status}`);
+        this.logger.warn(
+          `Biometric microservice returned HTTP ${response.status} in ${elapsed}ms`,
+        );
         return {
           status: "offline",
           matchResult: "not_performed",
@@ -95,6 +106,8 @@ export class FastApiBiometricAdapter implements BiometricPort {
         timestamp: new Date().toISOString(),
         reason: "The biometric verification microservice is unreachable.",
       };
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 }

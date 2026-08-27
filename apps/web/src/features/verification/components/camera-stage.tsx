@@ -1,4 +1,4 @@
-import { Camera, CameraOff, Loader2, ShieldAlert } from "lucide-react";
+import { Camera, CameraOff, Loader2, ShieldAlert, SwitchCamera } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
@@ -9,6 +9,8 @@ interface CameraStageProps {
   detail: string | null;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   onStart: () => void;
+  onToggleFacingMode?: () => void;
+  facingMode?: "environment" | "user";
   /** Overlay rendered on top of a live preview (scan frame, guidance). */
   overlay?: ReactNode;
   /** Accessible description of what the camera is being used for. */
@@ -28,6 +30,8 @@ export function CameraStage({
   detail,
   videoRef,
   onStart,
+  onToggleFacingMode,
+  facingMode,
   overlay,
   purpose,
   className,
@@ -54,6 +58,19 @@ export function CameraStage({
           mirrored && "scale-x-[-1]",
         )}
       />
+
+      {live && onToggleFacingMode && (
+        <button
+          type="button"
+          onClick={onToggleFacingMode}
+          className="absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-metadata font-semibold text-white backdrop-blur-md transition-colors hover:bg-black/80 active:scale-95"
+          aria-label={`Switch to ${facingMode === "environment" ? "front" : "back"} camera`}
+          title={`Switch to ${facingMode === "environment" ? "front" : "back"} camera`}
+        >
+          <SwitchCamera className="size-4" aria-hidden="true" />
+          <span className="text-[11px] capitalize">{facingMode === "environment" ? "Back" : "Front"}</span>
+        </button>
+      )}
 
       {live && overlay}
 

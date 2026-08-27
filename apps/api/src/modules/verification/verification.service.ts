@@ -26,6 +26,7 @@ import {
 } from "./verification.types";
 
 import { QrPresentationService } from "../qr-presentation/qr-presentation.service";
+import { StorageService } from "../storage/storage.service";
 
 const SESSION_TTL_MS = 10 * 60 * 1000;
 const CREDENTIAL_STAGES = ["validate", "resolve", "issuer", "status"] as const;
@@ -68,6 +69,7 @@ export class VerificationService {
     private readonly confirmationService: ConfirmationService,
     private readonly auditService: AuditService,
     private readonly qrPresentationService: QrPresentationService,
+    private readonly storageService: StorageService,
   ) {}
 
   /* ------------------------------------------------------------ QR Intake */
@@ -478,7 +480,90 @@ export class VerificationService {
       throw new ForbiddenException("Identity matching requires a valid credential.");
     }
 
-    const result = await this.identityService.verifyIdentity(session.credentialReference, input);
+    // Resolve the reference face from storage so the biometric adapter has actual image data.
+    // We look up the reference_face asset for the credential's official, download it, and
+    // convert to base64. If unavailable we proceed without it — the service will report
+    // "not_performed" gracefully rather than crashing.
+    let referencePhotoBase64: string | undefined;
+    try {
+      if (this.dbService.db && this.dbService.isConnected) {
+        // Find the official linked to this credential reference
+        const rows = await this.dbService.db
+          .select({
+            officialId: schema.officials.id,
+            photoUrl: schema.credentials.photoUrl,
+          })
+          .from(schema.credentials)
+          .innerJoin(
+            schema.officials,
+            eq(schema.credentials.subjectUserId, schema.officials.userId),
+          )
+          .where(eq(schema.credentials.credentialReference, session.credentialReference))
+          .limit(1);
+
+        const officialId = rows[0]?.officialId;
+        const photoUrl = rows[0]?.photoUrl;
+
+        if (officialId) {
+          // Fetch all assets for this official and find reference_face, falling back to portrait
+          const assets = await this.dbService.db
+            .select({
+              storagePath: schema.demoAssets.storagePath,
+              assetType: schema.demoAssets.assetType,
+            })
+            .from(schema.demoAssets)
+            .where(eq(schema.demoAssets.officialId, officialId));
+
+          const refFace =
+            assets.find(
+              (a) => a.assetType === "reference_face" || a.storagePath?.includes("reference_face"),
+            ) ||
+            assets.find(
+              (a) => a.assetType === "portrait" || a.storagePath?.includes("portrait"),
+            );
+
+          if (refFace?.storagePath) {
+            try {
+              const { buffer, mimeType } = await this.storageService.getFile(refFace.storagePath);
+              referencePhotoBase64 = `data:${mimeType};base64,${buffer.toString("base64")}`;
+              this.logger.log(
+                `Reference face resolved for ${session.credentialReference} (${refFace.storagePath})`,
+              );
+            } catch (storageErr: any) {
+              this.logger.warn(
+                `Storage getFile failed for ${refFace.storagePath}: ${storageErr.message}`,
+              );
+            }
+          }
+        }
+
+        // Fallback: if referencePhotoBase64 is not yet resolved, check credential photoUrl
+        if (!referencePhotoBase64 && photoUrl) {
+          if (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) {
+            try {
+              const resp = await fetch(photoUrl);
+              if (resp.ok) {
+                const arrayBuf = await resp.arrayBuffer();
+                const mime = resp.headers.get("content-type") || "image/jpeg";
+                referencePhotoBase64 = `data:${mime};base64,${Buffer.from(arrayBuf).toString("base64")}`;
+                this.logger.log(`Reference face resolved from public photoUrl for ${session.credentialReference}`);
+              }
+            } catch (fetchErr: any) {
+              this.logger.warn(`Could not fetch photoUrl ${photoUrl}: ${fetchErr.message}`);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `Could not fetch reference face for ${session.credentialReference}: ${err.message}`,
+      );
+    }
+
+    const result = await this.identityService.verifyIdentity(session.credentialReference, {
+      ...input,
+      referencePhotoBase64,
+    });
     session.identity = result;
 
     if (result.matchResult === "match" || result.matchResult === "inconclusive") {

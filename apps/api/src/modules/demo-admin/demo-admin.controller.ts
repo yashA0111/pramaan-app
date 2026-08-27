@@ -153,6 +153,21 @@ export class DemoAdminController {
     return this.demoAdminService.archiveOfficial(id, user?.id);
   }
 
+  @Delete("officials/:id/purge")
+  @Roles("demo_admin")
+  @ApiOperation({
+    summary: "Permanently delete official, credentials, assets, and user records from database",
+    description:
+      "Permanently purges official and associated credential/biometric assets from the database and storage. " +
+      "Frees up the email and credential reference so they can be reused without conflict.",
+  })
+  async purgeOfficial(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<any> {
+    return this.demoAdminService.purgeOfficial(id, user?.id);
+  }
+
   @Post("officials/:id/assets")
   @Roles("demo_admin")
   @UseInterceptors(FileInterceptor("file"))

@@ -1,0 +1,9 @@
+{
+  "include": [
+    "services/biometric"
+  ],
+  "extraPaths": [
+    "services/biometric",
+    "services/biometric/.venv/Lib/site-packages"
+  ]
+}

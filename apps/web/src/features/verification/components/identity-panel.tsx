@@ -1,4 +1,4 @@
-import { FlaskConical, ScanFace } from "lucide-react";
+import { FlaskConical, ScanFace, SwitchCamera } from "lucide-react";
 import { useState } from "react";
 
 import { TONE_CLASSES, VERIFICATION_STATUS } from "@/lib/status";
@@ -32,25 +32,25 @@ interface StatePresentation {
 const FACE_STATE: Record<FaceState, StatePresentation> = {
   ready: {
     headline: "Ready to compare",
-    body: "Point the front camera at the person holding the credential, then compare.",
+    body: "Point the camera at the person holding the credential, then tap 'Compare identity'.",
     tone: "neutral",
     retry: false,
   },
   camera_initializing: {
     headline: "Starting the camera",
-    body: "Waiting for the front camera to become available.",
+    body: "Waiting for the camera to become available.",
     tone: "active",
     retry: false,
   },
   detecting: {
-    headline: "Looking for a face",
-    body: "Keep the subject centred and still.",
+    headline: "Camera active",
+    body: "Frame the subject's face, then tap 'Compare identity'.",
     tone: "active",
     retry: false,
   },
   matching: {
-    headline: "Comparing against the credential photograph",
-    body: "This runs against the mocked matching service.",
+    headline: "Comparing biometric identity...",
+    body: "Evaluating 1:1 facial similarity against the enrolled reference photo.",
     tone: "active",
     retry: false,
   },
@@ -122,9 +122,41 @@ export function IdentityPanel({
   disabled = false,
   className,
 }: IdentityPanelProps) {
-  const camera = useCamera({ facingMode: "user" });
+  // Default to environment (back camera)
+  const camera = useCamera({ facingMode: "environment", autoStart: true });
   const [observation, setObservation] =
     useState<IdentityVerificationInput["observation"]>("single_face");
+
+  const handleCompare = () => {
+    let capturedFrameBase64: string | undefined;
+    const video = camera.videoRef.current;
+    if (video && video.readyState >= 2) {
+      try {
+        const rawW = video.videoWidth || 640;
+        const rawH = video.videoHeight || 480;
+        const maxDim = 640;
+        const scale = Math.min(1, maxDim / Math.max(rawW, rawH));
+        const w = Math.round(rawW * scale);
+        const h = Math.round(rawH * scale);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, w, h);
+          capturedFrameBase64 = canvas.toDataURL("image/jpeg", 0.82);
+        }
+      } catch {
+        // ignore snapshot errors
+      }
+    }
+    onVerify({
+      observation,
+      quality: 0.82,
+      ...(capturedFrameBase64 ? { capturedFrameBase64 } : {}),
+    });
+  };
 
   const state: FaceState = busy
     ? "matching"
@@ -164,8 +196,10 @@ export function IdentityPanel({
           detail={camera.detail}
           videoRef={camera.videoRef}
           onStart={camera.start}
-          mirrored
-          purpose="Front camera, used to compare the person present with the credential photograph."
+          onToggleFacingMode={camera.toggleFacingMode}
+          facingMode={camera.facingMode}
+          mirrored={camera.facingMode === "user"}
+          purpose="Camera used to compare the person present with the credential photograph."
           className="aspect-[4/5] w-full lg:aspect-[3/4]"
         />
 
@@ -199,13 +233,18 @@ export function IdentityPanel({
               <ActionButton
                 busy={busy}
                 disabled={disabled || busy}
-                onClick={() => onVerify({ observation, quality: 0.82 })}
+                onClick={handleCompare}
               >
                 {presentation.retry ? "Compare again" : "Compare identity"}
               </ActionButton>
-              {camera.state === "idle" && (
+              {camera.state === "idle" ? (
                 <ActionButton tone="quiet" onClick={camera.start}>
-                  Start front camera
+                  Start camera
+                </ActionButton>
+              ) : (
+                <ActionButton tone="quiet" onClick={camera.toggleFacingMode} disabled={busy}>
+                  <SwitchCamera className="size-4" aria-hidden="true" />
+                  {camera.facingMode === "environment" ? "Switch to front camera" : "Switch to back camera"}
                 </ActionButton>
               )}
             </div>

@@ -26,7 +26,11 @@ interface UseCameraResult {
  * Browser APIs are only touched inside callbacks/effects, never at module
  * scope or during render.
  */
-export function useCamera({ facingMode = "environment", autoStart = false }: UseCameraOptions = {}): UseCameraResult {
+export function useCamera({ facingMode: initialFacingMode = "environment", autoStart = false }: UseCameraOptions = {}): UseCameraResult & {
+  facingMode: "environment" | "user";
+  toggleFacingMode: () => void;
+} {
+  const [facingMode, setFacingMode] = useState<"environment" | "user">(initialFacingMode);
   const [state, setState] = useState<CameraState>("idle");
   const [detail, setDetail] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -41,8 +45,12 @@ export function useCamera({ facingMode = "environment", autoStart = false }: Use
     setState("idle");
   }, []);
 
-  const start = useCallback(() => {
-    if (activeRef.current) return;
+  const startWithMode = useCallback((mode: "environment" | "user") => {
+    // Clean up existing stream first
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
     activeRef.current = true;
     setDetail(null);
 
@@ -55,7 +63,14 @@ export function useCamera({ facingMode = "environment", autoStart = false }: Use
 
     setState("requesting_permission");
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+      .getUserMedia({
+        video: {
+          facingMode: { ideal: mode },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      })
       .then(async (stream) => {
         if (!activeRef.current) {
           stream.getTracks().forEach((track) => track.stop());
@@ -89,18 +104,30 @@ export function useCamera({ facingMode = "environment", autoStart = false }: Use
         setState("camera_unavailable");
         setDetail("The camera could not be started. It may be in use by another app.");
       });
-  }, [facingMode]);
+  }, []);
+
+  const start = useCallback(() => {
+    startWithMode(facingMode);
+  }, [facingMode, startWithMode]);
+
+  const toggleFacingMode = useCallback(() => {
+    const nextMode = facingMode === "environment" ? "user" : "environment";
+    setFacingMode(nextMode);
+    if (activeRef.current || state === "camera_ready" || state === "scanning") {
+      startWithMode(nextMode);
+    }
+  }, [facingMode, state, startWithMode]);
 
   useEffect(() => {
-    if (autoStart) start();
+    if (autoStart) startWithMode(initialFacingMode);
     return () => {
       activeRef.current = false;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     };
-  }, [autoStart, start]);
+  }, [autoStart, initialFacingMode, startWithMode]);
 
-  return { state, videoRef, start, stop, detail };
+  return { state, videoRef, start, stop, detail, facingMode, toggleFacingMode };
 }
 
 /** Marks the ready camera as actively scanning, without touching the stream. */

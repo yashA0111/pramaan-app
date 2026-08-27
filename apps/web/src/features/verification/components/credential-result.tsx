@@ -18,15 +18,15 @@ const OUTCOME_COPY: Record<
   unknown: null,
   valid: {
     title: "Credential evidence",
-    body: "The credential itself passed registry validation. This is evidence about the document — not yet about the person holding it.",
+    body: "The credential passed official validation. This is evidence about the document — not yet about the person holding it.",
   },
   invalid: {
     title: "Credential did not validate",
-    body: "The signature on this credential could not be verified. Treat the document as unproven.",
+    body: "The digital signature on this credential could not be verified. Treat the document as unproven.",
   },
   expired: {
     title: "Credential has expired",
-    body: "This credential exists in the registry, but its validity period has ended.",
+    body: "This credential was officially issued, but its validity period has ended.",
   },
   revoked: {
     title: "Credential was revoked",
@@ -34,7 +34,7 @@ const OUTCOME_COPY: Record<
   },
   unavailable: {
     title: "Credential could not be checked",
-    body: "The registry did not answer. Nothing about this credential has been established either way.",
+    body: "The official verification service did not respond. Nothing about this credential has been established either way.",
   },
 };
 
@@ -69,7 +69,7 @@ export function CredentialResult({ session, className }: CredentialResultProps) 
             title="No credential document to show"
             body={
               failedCheck?.detail ??
-              "The reference did not resolve to a credential record in the registry."
+              "This reference could not be matched to an official credential record."
             }
           />
         )}

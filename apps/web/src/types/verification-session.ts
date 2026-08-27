@@ -91,7 +91,9 @@ export interface IdentityVerificationInput {
   /** Frames observed by the client, used by the mock to simulate detection. */
   observation: "single_face" | "no_face" | "multiple_faces";
   /** Client-side capture quality hint, 0–1. */
-  quality?: number;
+  quality?: number | undefined;
+  /** Captured live video frame as base64 JPEG data URL */
+  capturedFrameBase64?: string | undefined;
 }
 
 /* ------------------------------------------------- official confirmation */

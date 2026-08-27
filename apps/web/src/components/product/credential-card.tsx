@@ -40,7 +40,7 @@ export function CredentialCard({ credential, status, className }: CredentialCard
       <header className="flex items-center justify-between gap-3 border-b border-border py-2.5 pl-5 pr-4">
         <p className="flex min-w-0 items-center gap-1.5 text-label uppercase text-foreground-muted">
           <Landmark className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className="truncate">Government credential · demo registry</span>
+          <span className="truncate">Official Government Credential</span>
         </p>
         {status && <CredentialStatusBadge status={status} />}
       </header>
@@ -65,8 +65,8 @@ export function CredentialCard({ credential, status, className }: CredentialCard
       </div>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-5 py-4">
-        <CredentialField label="Credential ID" value={credential.credentialId} mono />
-        <CredentialField label="Registry" value={registryLabel(credential)} />
+        <CredentialField label="Official ID" value={credential.credentialId} mono />
+        <CredentialField label="Status" value={registryLabel(credential)} />
         <CredentialField label="Issued" value={formatDate(credential.issuedOn)} />
         <CredentialField label="Valid until" value={formatDate(credential.validUntil)} />
       </dl>
@@ -76,7 +76,7 @@ export function CredentialCard({ credential, status, className }: CredentialCard
           Issued by {credential.issuer.name} — {credential.issuer.authority}
         </p>
         <p className="mt-1 text-metadata text-foreground-subtle">
-          Synthetic demo identity. No real government data.
+          Digital verification record.
         </p>
       </footer>
     </article>

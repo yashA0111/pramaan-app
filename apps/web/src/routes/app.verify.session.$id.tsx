@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Clock3, ServerCrash } from "lucide-react";
 
 import { StateView } from "@/components/product/state-view";
@@ -45,8 +45,20 @@ const TERMINAL: VerificationSession["state"][] = [
 
 function SessionPage() {
   const { id } = Route.useParams();
+  const navigate = useNavigate();
   const flow = useVerificationFlow(id);
   const session = flow.session;
+
+  const handleSkipConfirmation = () => {
+    flow.skipConfirmation.mutate(undefined, {
+      onSuccess: () => {
+        void navigate({
+          to: "/app/verify/receipt/$id",
+          params: { id },
+        });
+      },
+    });
+  };
 
   if (flow.query.isPending) {
     return (
@@ -127,7 +139,7 @@ function SessionPage() {
             requesting={flow.requestConfirmation.isPending}
             skipping={flow.skipConfirmation.isPending}
             onRequest={() => flow.requestConfirmation.mutate()}
-            onSkip={() => flow.skipConfirmation.mutate()}
+            onSkip={handleSkipConfirmation}
           />
         )}
 

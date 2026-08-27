@@ -83,7 +83,7 @@ function mockDecodeQr(raw: string, options: DecodeQrOptions = {}): QrScanResult 
       ...base,
       outcome: "offline" as const,
       credentialReference: null,
-      message: "You appear to be offline. Pramaan could not reach the registry.",
+      message: "You appear to be offline. Pramaan could not reach the verification service.",
     };
   }
 
@@ -93,7 +93,7 @@ function mockDecodeQr(raw: string, options: DecodeQrOptions = {}): QrScanResult 
       ...base,
       outcome: "unrecognized_qr" as const,
       credentialReference: null,
-      message: "That QR code was read, but it is not a Pramaan credential.",
+      message: "That QR code was read, but it is not a recognized government credential.",
     };
   }
   if (parsed.kind === "invalid") {
@@ -101,7 +101,7 @@ function mockDecodeQr(raw: string, options: DecodeQrOptions = {}): QrScanResult 
       ...base,
       outcome: "invalid_qr" as const,
       credentialReference: null,
-      message: "This looks like a Pramaan code, but the reference or presentation token is malformed.",
+      message: "This looks like a Pramaan code, but the reference or security token is malformed.",
     };
   }
 
@@ -121,7 +121,7 @@ function mockDecodeQr(raw: string, options: DecodeQrOptions = {}): QrScanResult 
       ...base,
       outcome: "expired_reference" as const,
       credentialReference: targetRef,
-      message: "This reference is no longer active in the demo registry.",
+      message: "This reference is no longer active in official records.",
     };
   }
   if (scenario.serviceFailure) {
@@ -247,7 +247,7 @@ function mockAdvanceCredentialStage(sessionId: string): VerificationSession {
 
   const scenario = findScenario(session.credentialReference);
   if (!scenario) {
-    return fail(session, "unavailable", "validate", "Reference not present in the registry.");
+    return fail(session, "unavailable", "validate", "Credential record not found in official records.");
   }
   if (scenario.serviceFailure) {
     session.state = "service_unavailable";
@@ -270,14 +270,14 @@ function mockAdvanceCredentialStage(sessionId: string): VerificationSession {
       if (scenario.credentialOutcome === "invalid") {
         return fail(session, "invalid", "validate", "Credential signature failed validation.");
       }
-      pass(session, "validate", "Signature well-formed and verifiable.");
+      pass(session, "validate", "Security signature verified successfully.");
       break;
     case "resolve":
       if (!scenario.credential) {
-        return fail(session, "unavailable", "resolve", "Credential could not be resolved in the registry.");
+        return fail(session, "unavailable", "resolve", "Credential details could not be retrieved from official records.");
       }
       session.credential = scenario.credential;
-      pass(session, "resolve", "Credential located in the demo registry.");
+      pass(session, "resolve", "Credential located in official records.");
       break;
     case "issuer":
       pass(session, "issuer", `Issuer recognized — ${scenario.credential?.issuer.name ?? "unknown"}.`);
@@ -289,7 +289,7 @@ function mockAdvanceCredentialStage(sessionId: string): VerificationSession {
       if (scenario.credentialOutcome === "revoked") {
         return fail(session, "revoked", "status", "Credential was revoked by the issuing authority.");
       }
-      pass(session, "status", "Active in the registry · not revoked.");
+      pass(session, "status", "Active and in good standing · not revoked.");
       session.credentialOutcome = "valid";
       session.credentialStatus = "verified";
       session.state = "credential_resolved";
@@ -729,7 +729,7 @@ export function buildReceipt(session: VerificationSession): TrustReceiptViewMode
   const methods: VerificationMethodResult[] = [
     method("credential_validation", "Credential validation", session.checks.find((c) => c.id === "validate")),
     method("issuer_validation", "Issuer validation", session.checks.find((c) => c.id === "issuer")),
-    method("status_validation", "Registry status validation", session.checks.find((c) => c.id === "status")),
+    method("status_validation", "Official status validation", session.checks.find((c) => c.id === "status")),
     {
       id: "identity_match",
       label: "Identity match",
@@ -771,7 +771,7 @@ export function buildReceipt(session: VerificationSession): TrustReceiptViewMode
 
   const summary =
     finalState === "final_verified"
-      ? "The credential passed registry validation, the presented person matched the reference identity, and an authorized official confirmed this request."
+      ? "The credential passed official validation, the presented person matched the reference identity, and an authorized official confirmed this request."
       : finalState === "identity_matched_only"
         ? "The credential is valid and the presented person matched the reference identity. No official confirmed this request, so authority was not independently established."
         : finalState === "credential_valid_only"

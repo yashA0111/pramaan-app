@@ -23,6 +23,7 @@ export interface AppConfig {
   demoAdminEmails: string[];
   biometricServiceUrl: string;
   biometricServiceToken?: string;
+  biometricTimeoutMs: number;
   supabaseUrl?: string;
   supabaseServiceRoleKey?: string;
   supabaseStorageBucket: string;
@@ -87,6 +88,7 @@ export const config: AppConfig = {
     .map((e) => e.trim().toLowerCase()),
   biometricServiceUrl: process.env.BIOMETRIC_SERVICE_URL || "http://127.0.0.1:8000",
   biometricServiceToken: process.env.BIOMETRIC_SERVICE_TOKEN,
+  biometricTimeoutMs: parseInt(process.env.BIOMETRIC_TIMEOUT_MS || "30000", 10),
   supabaseUrl: envValue("SUPABASE_URL"),
   supabaseServiceRoleKey: envValue("SUPABASE_SERVICE_ROLE_KEY"),
   supabaseStorageBucket: envValue("SUPABASE_STORAGE_BUCKET") || "pramaan-demo-assets",

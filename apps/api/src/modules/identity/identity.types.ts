@@ -18,8 +18,10 @@ export interface IdentityVerificationInputDto {
   observation: "single_face" | "no_face" | "multiple_faces";
   quality?: number;
   capturedFrameBase64?: string;
-  referencePhotoPath?: string;
+  /** Base64-encoded image of the enrolled reference face, fetched server-side from storage */
+  referencePhotoBase64?: string;
 }
+
 
 export interface IdentityVerificationResult {
   status: FaceState;

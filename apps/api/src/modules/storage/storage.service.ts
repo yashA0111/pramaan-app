@@ -37,10 +37,8 @@ export class StorageService implements StoragePort {
     try {
       return await this.adapter.uploadFile(folder, filename, buffer, mimeType);
     } catch (err: any) {
-      if (!this.shouldFallBackToLocal(err)) throw err;
-
       this.logger.warn(
-        `Supabase Storage unavailable during upload (${err.message}); retrying with Local File Storage adapter.`,
+        `Primary storage upload failed (${err.message}); retrying with Local File Storage adapter.`,
       );
       return this.localAdapter.uploadFile(folder, filename, buffer, mimeType);
     }
@@ -50,12 +48,14 @@ export class StorageService implements StoragePort {
     try {
       return await this.adapter.getFile(storagePath);
     } catch (err: any) {
-      if (!this.shouldFallBackToLocal(err)) throw err;
-
-      this.logger.warn(
-        `Supabase Storage unavailable during read (${err.message}); retrying with Local File Storage adapter.`,
-      );
-      return this.localAdapter.getFile(storagePath);
+      if (this.adapter !== this.localAdapter) {
+        try {
+          return await this.localAdapter.getFile(storagePath);
+        } catch {
+          // Both failed
+        }
+      }
+      throw err;
     }
   }
 
@@ -63,19 +63,10 @@ export class StorageService implements StoragePort {
     try {
       return await this.adapter.deleteFile(storagePath);
     } catch (err: any) {
-      if (!this.shouldFallBackToLocal(err)) throw err;
-
-      this.logger.warn(
-        `Supabase Storage unavailable during delete (${err.message}); retrying with Local File Storage adapter.`,
-      );
-      return this.localAdapter.deleteFile(storagePath);
+      if (this.adapter !== this.localAdapter) {
+        return this.localAdapter.deleteFile(storagePath);
+      }
+      return false;
     }
-  }
-
-  private shouldFallBackToLocal(err: any): boolean {
-    return (
-      this.adapter === this.supabaseAdapter &&
-      err?.message === "Supabase credentials not configured"
-    );
   }
 }

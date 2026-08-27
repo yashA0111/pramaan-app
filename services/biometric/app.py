@@ -3,12 +3,31 @@ FastAPI Biometric Verification Service for Pramaan.
 Executes 1:1 face detection and identity comparison using OpenCV YuNet and SFace ONNX engine.
 """
 
-from fastapi import FastAPI, Header, HTTPException, Request
-from pydantic import BaseModel, Field
-from typing import Optional
+import os
+import sys
 import datetime
 import hmac
-import os
+from typing import Optional
+from fastapi import FastAPI, Header, HTTPException
+from pydantic import BaseModel, Field
+
+try:
+    import cv2
+    cv2.setNumThreads(1)
+except ImportError:
+    pass
+
+# Load .env if present
+try:
+    from dotenv import load_dotenv
+    # Check parent dirs for .env
+    for candidate in [".env", "../../.env", "../.env"]:
+        if os.path.exists(candidate):
+            load_dotenv(candidate)
+            break
+except ImportError:
+    pass
+
 from face_engine import FaceEngine
 
 app = FastAPI(
@@ -20,8 +39,8 @@ app = FastAPI(
 engine = FaceEngine()
 
 class BiometricRequest(BaseModel):
-    credential_reference: str = Field(..., example="PRM-DEMO-0001")
-    observation: str = Field(default="single_face", example="single_face")
+    credential_reference: str = Field(..., json_schema_extra={"example": "PRM-DEMO-0001"})
+    observation: str = Field(default="single_face", json_schema_extra={"example": "single_face"})
     quality: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
     captured_frame: Optional[str] = None
     reference_photo: Optional[str] = None
@@ -64,4 +83,8 @@ def verify_face(payload: BiometricRequest, authorization: Optional[str] = Header
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Determine port from env if available
+    service_url = os.getenv("BIOMETRIC_SERVICE_URL", "")
+    default_port = 8001 if "8001" in service_url else 8000
+    port = int(os.getenv("PORT", os.getenv("BIOMETRIC_PORT", str(default_port))))
+    uvicorn.run(app, host="0.0.0.0", port=port)

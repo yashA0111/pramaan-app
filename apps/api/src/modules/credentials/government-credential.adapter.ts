@@ -269,4 +269,8 @@ export class GovernmentCredentialAdapter implements GovernmentCredentialPort {
   addSyntheticCredential(reference: string, outcome: CredentialOutcome, credential: CredentialSummary | null) {
     this.syntheticFallback[reference.trim().toUpperCase()] = { outcome, credential };
   }
+
+  removeSyntheticCredential(reference: string) {
+    delete this.syntheticFallback[reference.trim().toUpperCase()];
+  }
 }

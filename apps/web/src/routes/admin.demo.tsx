@@ -347,6 +347,38 @@ function DemoAdminPage() {
     }
   }
 
+  async function handlePurgeOfficial(id: string) {
+    if (
+      !confirm(
+        "⚠️ PERMANENT DATABASE DELETION:\n\n" +
+        "Are you sure you want to completely remove this official, their credentials, reference biometric face, and presentations from the database?\n\n" +
+        "This frees up the Credential Reference and Email so you can recreate this profile again with no database conflict."
+      )
+    ) {
+      return;
+    }
+
+    setNotice(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/demo/officials/${id}/purge`, {
+        method: "DELETE",
+        headers: adminHeaders(),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      setNotice({
+        kind: "success",
+        text: "Official completely deleted from database. Reference and email are now free to reuse.",
+      });
+      setSelectedId("");
+      await loadOfficials();
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Failed to permanently delete official.",
+      });
+    }
+  }
+
   async function uploadAssetFile(officialId: string, assetType: AssetType, file: File) {
     const formData = new FormData();
     formData.append("file", file);
@@ -411,24 +443,24 @@ function DemoAdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen w-full overflow-x-hidden bg-background text-foreground">
       <header className="border-b border-border bg-surface">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
             <Link
               to="/app/verify"
-              className="inline-flex size-9 items-center justify-center border border-border bg-surface text-foreground-muted hover:bg-muted hover:text-foreground"
+              className="inline-flex size-9 shrink-0 items-center justify-center border border-border bg-surface text-foreground-muted hover:bg-muted hover:text-foreground"
               aria-label="Back to verification"
             >
               <ArrowLeft className="size-4" aria-hidden="true" />
             </Link>
-            <div>
+            <div className="min-w-0">
               <p className="text-label uppercase tracking-widest text-foreground-subtle">Pramaan Operations</p>
               <h1 className="font-display text-section-title font-semibold text-foreground">Demo Admin & Credentials</h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => loadOfficials()}
@@ -452,20 +484,20 @@ function DemoAdminPage() {
 
       {notice && (
         <div className={`border-b px-4 py-3 text-body-sm sm:px-6 lg:px-8 ${notice.kind === "success" ? "border-success/30 bg-success-soft text-success-soft-foreground" : "border-danger/30 bg-danger-soft text-danger-soft-foreground"}`}>
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-            <p className="flex items-center gap-2">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 overflow-hidden">
+            <p className="flex min-w-0 items-center gap-2">
               <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
-              {notice.text}
+              <span className="min-w-0 truncate">{notice.text}</span>
             </p>
-            <button type="button" onClick={() => setNotice(null)} className="p-1 hover:opacity-75" aria-label="Dismiss notice">
+            <button type="button" onClick={() => setNotice(null)} className="shrink-0 p-1 hover:opacity-75" aria-label="Dismiss notice">
               <X className="size-4" aria-hidden="true" />
             </button>
           </div>
         </div>
       )}
 
-      <main className="mx-auto grid max-w-7xl gap-6 p-4 sm:p-6 lg:grid-cols-12 lg:p-8">
-        <section className="lg:col-span-4">
+      <main className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 p-4 sm:p-6 lg:grid-cols-12 lg:p-8">
+        <section className="min-w-0 w-full lg:col-span-4">
           <div className="border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-border px-4 py-3 sm:px-5">
               <div className="flex items-center gap-2">
@@ -507,7 +539,7 @@ function DemoAdminPage() {
           </div>
         </section>
 
-        <section className="lg:col-span-8">
+        <section className="min-w-0 w-full lg:col-span-8">
           {formOpen && (
             <div className="mb-6 border border-border bg-surface p-5 md:p-6">
               <div className="flex items-center justify-between border-b border-border pb-4">
@@ -521,7 +553,7 @@ function DemoAdminPage() {
               </div>
 
               <form onSubmit={createOfficial} className="mt-5 space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Field label="Full Name" value={form.displayName} onChange={(v) => setForm((f) => ({ ...f, displayName: v }))} placeholder="e.g. Inspector Deepak Sharma" required />
                   <Field label="Registered Email" value={form.registeredEmail} onChange={(v) => setForm((f) => ({ ...f, registeredEmail: v }))} placeholder="deepak.sharma@delhipolice.gov.in" type="email" required />
                   <Field label="Designation" value={form.designation} onChange={(v) => setForm((f) => ({ ...f, designation: v }))} placeholder="Inspector" required />
@@ -534,7 +566,7 @@ function DemoAdminPage() {
                   <p className="text-label uppercase text-foreground-subtle">Initial Biometric & Evidence Assets</p>
                   <p className="mt-1 text-metadata text-foreground-muted">QR code will be generated automatically by the server.</p>
 
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <CreateAssetPicker icon={<FileImage className="size-5" />} label="Portrait Photo" description="Official ID card portrait" selection={portrait} onSelect={(e) => selectFile("portrait", e)} onClear={() => clearSelection("portrait")} />
                     <CreateAssetPicker icon={<Fingerprint className="size-5" />} label="Reference Face (Protected)" description="Enrolled biometric template input" selection={referenceFace} onSelect={(e) => selectFile("reference_face", e)} onClear={() => clearSelection("reference_face")} />
                   </div>
@@ -564,6 +596,7 @@ function DemoAdminPage() {
                 onRegenerateQr={() => handleRegenerateQr(selected.id)}
                 onExpireQr={() => handleExpireQr(selected.id)}
                 onArchive={() => handleArchiveOfficial(selected.id)}
+                onPurge={() => handlePurgeOfficial(selected.id)}
                 onUpload={handleExistingUpload}
                 onAddNew={() => setFormOpen(true)}
               />
@@ -587,6 +620,7 @@ function CredentialWorkspace({
   onRegenerateQr,
   onExpireQr,
   onArchive,
+  onPurge,
   onUpload,
   onAddNew,
 }: {
@@ -599,6 +633,7 @@ function CredentialWorkspace({
   onRegenerateQr: () => void;
   onExpireQr: () => void;
   onArchive: () => void;
+  onPurge: () => void;
   onUpload: (assetType: AssetType, event: ChangeEvent<HTMLInputElement>) => void;
   onAddNew: () => void;
 }) {
@@ -674,7 +709,7 @@ function CredentialWorkspace({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-5 md:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-5 md:px-6">
         <div className="flex min-w-0 items-center gap-4">
           <Avatar name={official.displayName} photoUrl={credential?.photoUrl ?? null} large />
           <div className="min-w-0">
@@ -683,14 +718,14 @@ function CredentialWorkspace({
             <p className="mt-1 truncate text-body-sm text-foreground-muted">{official.designation} · {official.department}</p>
           </div>
         </div>
-        <button type="button" onClick={onAddNew} className="inline-flex min-h-10 items-center gap-2 border border-border bg-surface px-3.5 text-body-sm font-semibold text-foreground hover:bg-muted">
+        <button type="button" onClick={onAddNew} className="inline-flex shrink-0 min-h-10 items-center gap-2 border border-border bg-surface px-3.5 text-body-sm font-semibold text-foreground hover:bg-muted">
           <Plus className="size-4" aria-hidden="true" /> New credential
         </button>
       </div>
 
       {credential ? (
         <>
-          <div className="grid sm:grid-cols-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2">
             <InfoCell label="Credential reference" value={credential.reference} mono />
             <InfoCell label="Employee reference" value={official.employeeReference ?? "—"} mono />
             <InfoCell label="Posting" value={official.postingLocation} icon={<MapPin className="size-4" />} />
@@ -715,39 +750,39 @@ function CredentialWorkspace({
               </span>
             </div>
 
-            <div className="mt-5 grid gap-6 md:grid-cols-12 items-center">
-              <div className="md:col-span-5 flex flex-col items-center">
-                <div className="p-4 bg-white border border-border rounded-xl shadow-sm inline-block">
+            <div className="mt-5 flex flex-col gap-6 md:grid md:grid-cols-12 md:items-center">
+              <div className="flex flex-col items-center md:col-span-5">
+                <div className="inline-block rounded-xl border border-border bg-white p-4 shadow-sm">
                   {permanentQrUrl ? (
-                    <img src={permanentQrUrl} alt={`Permanent credential QR for ${credential?.reference}`} className="size-56 object-contain" />
+                    <img src={permanentQrUrl} alt={`Permanent credential QR for ${credential?.reference}`} className="size-44 object-contain sm:size-56" />
                   ) : (
-                    <div className="size-56 flex items-center justify-center bg-muted text-foreground-subtle">
+                    <div className="flex size-44 items-center justify-center bg-muted text-foreground-subtle sm:size-56">
                       <QrCode className="size-16 animate-pulse" />
                     </div>
                   )}
                 </div>
-                <p className="mt-2 font-mono text-[11px] text-foreground-subtle text-center break-all">
+                <p className="mt-2 max-w-full break-all text-center font-mono text-[11px] text-foreground-subtle">
                   {permanentUri}
                 </p>
               </div>
 
-              <div className="md:col-span-7 space-y-3">
-                <div className="border border-border bg-surface p-4 rounded-lg space-y-2 text-body-sm">
-                  <div className="flex justify-between items-center text-metadata">
-                    <span className="text-foreground-subtle uppercase">Credential Ref</span>
-                    <span className="font-mono text-foreground font-medium">{credential?.reference}</span>
+              <div className="space-y-3 md:col-span-7">
+                <div className="space-y-2 rounded-lg border border-border bg-surface p-4 text-body-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-metadata">
+                    <span className="uppercase text-foreground-subtle">Credential Ref</span>
+                    <span className="break-all font-mono font-medium text-foreground">{credential?.reference}</span>
                   </div>
-                  <div className="flex justify-between items-center text-metadata">
-                    <span className="text-foreground-subtle uppercase">QR Scheme</span>
-                    <span className="text-foreground font-medium">pramaan://credential/</span>
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-metadata">
+                    <span className="uppercase text-foreground-subtle">QR Scheme</span>
+                    <span className="font-medium text-foreground">pramaan://credential/</span>
                   </div>
-                  <div className="flex justify-between items-center text-metadata">
-                    <span className="text-foreground-subtle uppercase">Expiry</span>
-                    <span className="text-foreground font-medium">Never — controlled by backend</span>
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-metadata">
+                    <span className="uppercase text-foreground-subtle">Expiry</span>
+                    <span className="font-medium text-foreground">Never — controlled by backend</span>
                   </div>
-                  <div className="flex justify-between items-center text-metadata">
-                    <span className="text-foreground-subtle uppercase">Contains Secret</span>
-                    <span className="text-foreground font-medium">No — reference only</span>
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-metadata">
+                    <span className="uppercase text-foreground-subtle">Contains Secret</span>
+                    <span className="font-medium text-foreground">No — reference only</span>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 pt-1">
@@ -790,34 +825,34 @@ function CredentialWorkspace({
               )}
             </div>
 
-            <div className="mt-5 grid gap-6 md:grid-cols-12 items-center">
-              <div className="md:col-span-5 flex flex-col items-center">
-                <div className="p-4 bg-white border border-border rounded-xl shadow-sm inline-block">
+            <div className="mt-5 flex flex-col gap-6 md:grid md:grid-cols-12 md:items-center">
+              <div className="flex flex-col items-center md:col-span-5">
+                <div className="inline-block rounded-xl border border-border bg-white p-4 shadow-sm">
                   {ephemeralQrUrl ? (
-                    <img src={ephemeralQrUrl} alt="Active Ephemeral Verification Presentation" className="size-56 object-contain" />
+                    <img src={ephemeralQrUrl} alt="Active Ephemeral Verification Presentation" className="size-44 object-contain sm:size-56" />
                   ) : (
-                    <div className="size-56 flex items-center justify-center bg-muted text-foreground-subtle">
+                    <div className="flex size-44 items-center justify-center bg-muted text-foreground-subtle sm:size-56">
                       <QrCode className="size-16 opacity-40" />
                     </div>
                   )}
                 </div>
-                <p className="mt-2 font-mono text-[11px] text-foreground-subtle text-center">
+                <p className="mt-2 max-w-full break-all text-center font-mono text-[11px] text-foreground-subtle">
                   {activePres?.qrUri ?? "No active presentation"}
                 </p>
               </div>
 
-              <div className="md:col-span-7 space-y-3">
-                <div className="border border-border bg-surface p-4 rounded-lg space-y-2 text-body-sm">
-                  <div className="flex justify-between items-center text-metadata">
-                    <span className="text-foreground-subtle uppercase">Presentation ID</span>
-                    <span className="font-mono text-foreground font-medium">{activePres?.id || "—"}</span>
+              <div className="space-y-3 md:col-span-7">
+                <div className="space-y-2 rounded-lg border border-border bg-surface p-4 text-body-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-metadata">
+                    <span className="uppercase text-foreground-subtle">Presentation ID</span>
+                    <span className="max-w-full break-all font-mono font-medium text-foreground">{activePres?.id || "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center text-metadata">
-                    <span className="text-foreground-subtle uppercase">Security Type</span>
-                    <span className="text-foreground font-medium">Opaque Token (SHA-256 Hashed)</span>
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-metadata">
+                    <span className="uppercase text-foreground-subtle">Security Type</span>
+                    <span className="font-medium text-foreground">Opaque Token (SHA-256 Hashed)</span>
                   </div>
-                  <div className="flex justify-between items-center text-metadata">
-                    <span className="text-foreground-subtle uppercase">Expires At</span>
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-metadata">
+                    <span className="uppercase text-foreground-subtle">Expires At</span>
                     <span className="font-mono text-foreground">{activePres?.expiresAt ? new Date(activePres.expiresAt).toLocaleTimeString() : "15 mins TTL"}</span>
                   </div>
                 </div>
@@ -890,7 +925,7 @@ function CredentialWorkspace({
               <p className="mt-1 text-body-sm text-foreground-muted">Portrait is public evidence. Reference face is protected for 1:1 ONNX biometric comparison.</p>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
               <ExistingAsset
                 title="Portrait Photograph"
                 icon={<FileImage className="size-5" />}
@@ -911,23 +946,41 @@ function CredentialWorkspace({
             {detailsLoading && <p className="mt-4 text-metadata text-foreground-subtle">Refreshing assets…</p>}
           </div>
 
-          {/* Danger Zone: Archival */}
-          <div className="border-t border-border p-5 md:p-6 bg-danger-soft/10">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
+          {/* Danger Zone: Archival & Permanent Deletion */}
+          <div className="border-t border-border p-5 md:p-6 bg-danger-soft/10 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-4">
+              <div className="max-w-xl">
                 <h4 className="text-body-sm font-semibold text-danger flex items-center gap-1.5">
                   <ShieldAlert className="size-4" /> Non-Destructive Archival
                 </h4>
                 <p className="mt-1 text-metadata text-foreground-muted">
-                  Deactivate official from the active demo registry. All historical verification sessions and trust receipts are permanently preserved.
+                  Deactivate official from the active demo registry while preserving historical logs and trust receipts.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={onArchive}
-                className="inline-flex min-h-10 items-center gap-2 border border-danger/40 bg-surface px-4 text-body-sm font-semibold text-danger hover:bg-danger-soft/30"
+                className="inline-flex min-h-10 items-center gap-2 border border-danger/40 bg-surface px-4 text-body-sm font-semibold text-danger hover:bg-danger-soft/30 transition-colors"
               >
                 <Archive className="size-4" /> Archive Official
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="max-w-xl">
+                <h4 className="text-body-sm font-semibold text-danger flex items-center gap-1.5">
+                  <Trash2 className="size-4" /> Permanent Delete from DB
+                </h4>
+                <p className="mt-1 text-metadata text-foreground-muted">
+                  Completely removes this official, credentials, reference biometric face, and presentations from the database and storage. Frees up the Credential Reference and Email so you can recreate this profile without unique constraint conflicts.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onPurge}
+                className="inline-flex min-h-10 items-center gap-2 rounded-md bg-danger px-4 text-body-sm font-semibold text-danger-foreground hover:bg-danger/90 transition-colors"
+              >
+                <Trash2 className="size-4" /> Delete from DB
               </button>
             </div>
           </div>
@@ -1076,7 +1129,7 @@ function InfoCell({ label, value, mono = false, icon }: { label: string; value: 
   return (
     <div className="border-b border-r border-border px-5 py-4 last:border-r-0 sm:px-6">
       <p className="text-label uppercase text-foreground-subtle">{label}</p>
-      <p className={`mt-1 flex items-center gap-1.5 text-foreground ${mono ? "font-display text-credential tracking-wide" : "text-body-sm"}`}>{icon}{value}</p>
+      <p className={`mt-1 flex items-center gap-1.5 text-foreground ${mono ? "break-all font-display text-credential tracking-wide" : "text-body-sm"}`}>{icon}{value}</p>
     </div>
   );
 }
