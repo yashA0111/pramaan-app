@@ -3,10 +3,12 @@ FastAPI Biometric Verification Service for Pramaan.
 Executes 1:1 face detection and identity comparison using OpenCV YuNet and SFace ONNX engine.
 """
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Optional
 import datetime
+import hmac
+import os
 from face_engine import FaceEngine
 
 app = FastAPI(
@@ -42,7 +44,13 @@ def health_check():
     }
 
 @app.post("/verify-face", response_model=BiometricResponse)
-def verify_face(payload: BiometricRequest):
+def verify_face(payload: BiometricRequest, authorization: Optional[str] = Header(default=None)):
+    service_token = os.getenv("BIOMETRIC_SERVICE_TOKEN", "")
+    if service_token:
+        expected = f"Bearer {service_token}"
+        if not authorization or not hmac.compare_digest(authorization, expected):
+            raise HTTPException(status_code=401, detail="Invalid biometric service credentials")
+
     result = engine.compare_faces(
         credential_reference=payload.credential_reference,
         observation=payload.observation,
