@@ -37,27 +37,11 @@ class FaceEngine:
         sface_path = os.path.join(self.models_dir, "face_recognition_sface_2021dec.onnx")
 
         os.makedirs(self.models_dir, exist_ok=True)
-        if not os.path.exists(yunet_path):
-            try:
-                print(f"[FaceEngine] Downloading YuNet ONNX model to {yunet_path}...")
-                from urllib.request import urlretrieve
-                urlretrieve(
-                    "https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
-                    yunet_path,
-                )
-            except Exception as dl_err:
-                print(f"[FaceEngine] Could not download YuNet model: {dl_err}")
-
-        if not os.path.exists(sface_path):
-            try:
-                print(f"[FaceEngine] Downloading SFace ONNX model to {sface_path}...")
-                from urllib.request import urlretrieve
-                urlretrieve(
-                    "https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
-                    sface_path,
-                )
-            except Exception as dl_err:
-                print(f"[FaceEngine] Could not download SFace model: {dl_err}")
+        try:
+            from download_models import download_models
+            download_models(self.models_dir)
+        except Exception as dl_err:
+            print(f"[FaceEngine] Error while ensuring model downloads: {dl_err}")
 
         print(f"[FaceEngine] Loading models from directory: {self.models_dir}")
         print(f"[FaceEngine] YuNet path ({os.path.exists(yunet_path)}): {yunet_path}")

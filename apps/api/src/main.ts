@@ -17,6 +17,19 @@ async function bootstrap() {
   app.use(json({ limit: "25mb" }));
   app.use(urlencoded({ extended: true, limit: "25mb" }));
 
+  // Rewrite requests omitting /api/v1 prefix gracefully
+  app.use((req: any, _res: any, next: any) => {
+    if (
+      !req.url.startsWith("/api/v1") &&
+      !req.url.startsWith("/api/docs") &&
+      req.url !== "/" &&
+      req.url !== ""
+    ) {
+      req.url = `/api/v1${req.url.startsWith("/") ? req.url : `/${req.url}`}`;
+    }
+    next();
+  });
+
   const httpAdapter = app.getHttpAdapter().getInstance();
   const rootHealthResponse = {
     status: "ok",

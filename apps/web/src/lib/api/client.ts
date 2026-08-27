@@ -24,9 +24,31 @@ export class ApiError extends Error {
   }
 }
 
-export const API_BASE_URL =
-  (typeof import.meta !== "undefined" && import.meta.env?.["VITE_API_URL"]) ||
-  "http://localhost:3001/api/v1";
+function normalizeApiBaseUrl(rawUrl?: string): string {
+  if (!rawUrl) return "http://localhost:3001/api/v1";
+  let url = rawUrl.trim().replace(/\/+$/, "");
+  if (!url.endsWith("/api/v1")) {
+    if (url.endsWith("/api")) {
+      url = `${url}/v1`;
+    } else {
+      url = `${url}/api/v1`;
+    }
+  }
+  return url;
+}
+
+export const API_BASE_URL = normalizeApiBaseUrl(
+  (typeof import.meta !== "undefined" && import.meta.env?.["VITE_API_URL"]) || undefined,
+);
+
+export function buildEndpointUrl(endpoint: string): string {
+  const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  if (cleanEndpoint.startsWith("/api/v1/")) {
+    const baseWithoutPrefix = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
+    return `${baseWithoutPrefix}${cleanEndpoint}`;
+  }
+  return `${API_BASE_URL}${cleanEndpoint}`;
+}
 
 export const IS_MOCK_FORCED =
   (typeof import.meta !== "undefined" && import.meta.env?.["VITE_USE_MOCK"] === "true") ||
@@ -116,7 +138,7 @@ export async function apiRequest<T>(
     return mockRequest(fallbackProducer, mockOpts);
   }
 
-  const url = `${API_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+  const url = buildEndpointUrl(endpoint);
 
   try {
     const res = await fetch(url, {
