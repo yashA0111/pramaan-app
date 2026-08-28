@@ -29,3 +29,38 @@ export interface IdentityVerificationResult {
   timestamp: string;
   reason: string;
 }
+
+export interface FaceIdentificationInputDto {
+  observation: "single_face" | "no_face" | "multiple_faces";
+  quality?: number;
+  capturedFrameBase64?: string;
+}
+
+export type FaceIdentificationStatus =
+  | "candidate_found"
+  | "no_match"
+  | "no_face"
+  | "multiple_faces"
+  | "requires_review"
+  | "timeout"
+  | "offline"
+  | "not_configured"
+  | "error";
+
+export interface FaceIdentificationCandidate {
+  credentialReference: string;
+  fullName: string;
+  designation: string;
+  department: string;
+  posting: string;
+  photoUrl?: string | null;
+}
+
+export interface FaceIdentificationResult {
+  status: FaceIdentificationStatus;
+  candidate: FaceIdentificationCandidate | null;
+  confidence: number | null;
+  modelVersion: string;
+  timestamp: string;
+  reason: string;
+}

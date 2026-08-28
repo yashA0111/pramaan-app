@@ -7,8 +7,8 @@ import { CameraStage } from "@/features/verification/components/camera-stage";
 import { DemoFallback } from "@/features/verification/components/demo-fallback";
 import { ScanFrame } from "@/features/verification/components/scan-frame";
 import { createSession, decodeQr } from "@/features/verification/session-service";
+import { formatCredentialUri, parseQrPayload } from "@/features/verification/qr";
 import { useQrScanner } from "@/features/verification/use-qr-scanner";
-
 
 export const Route = createFileRoute("/app/verify/scan")({
   head: () => ({
@@ -22,8 +22,7 @@ export const Route = createFileRoute("/app/verify/scan")({
       { property: "og:title", content: "Scan a credential QR — Pramaan" },
       {
         property: "og:description",
-        content:
-          "Point your camera at an official credential QR code. Decoding is not verification.",
+        content: "Point your camera at an official credential QR code. Decoding is not verification.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -39,7 +38,18 @@ function ScanPage() {
 
   const start = useMutation({
     mutationFn: async (raw: string) => {
-      const scan = await decodeQr(raw);
+      // Normalize common QR payload shapes at the edge so the backend always
+      // receives the canonical Pramaan representation. This keeps demo QR
+      // images interoperable while the backend remains the source of truth.
+      const parsed = parseQrPayload(raw);
+      if (parsed.kind === "unrecognized") {
+        throw new Error("That QR code was read, but it is not a Pramaan credential.");
+      }
+      if (parsed.kind === "invalid") {
+        throw new Error("This looks like a Pramaan code, but the reference is malformed.");
+      }
+
+      const scan = await decodeQr(formatCredentialUri(parsed.reference));
       if (scan.outcome !== "qr_decoded" || !scan.credentialReference) {
         // The service owns the wording for every non-decoded outcome.
         throw new Error(scan.message);

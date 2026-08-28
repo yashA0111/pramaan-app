@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Clock3, ServerCrash } from "lucide-react";
+import { CheckCircle2, Clock3, ScanFace, ServerCrash } from "lucide-react";
 
 import { StateView } from "@/components/product/state-view";
 import { VerificationProgress } from "@/components/product/verification-progress";
@@ -47,6 +48,7 @@ function SessionPage() {
   const { id } = Route.useParams();
   const flow = useVerificationFlow(id);
   const session = flow.session;
+  const [identityRequested, setIdentityRequested] = useState(false);
 
   if (flow.query.isPending) {
     return (
@@ -90,6 +92,7 @@ function SessionPage() {
     session.identity?.matchResult === "match" || session.identity?.matchResult === "mismatch";
   const confirmationAvailable = session.identity !== null && session.identity.status !== "matching";
   const terminal = TERMINAL.includes(session.state);
+  const receiptAvailable = terminal || identitySettled || session.credentialOutcome === "valid";
 
   return (
     <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,17rem)] lg:gap-10">
@@ -110,7 +113,48 @@ function SessionPage() {
 
         <CredentialResult session={session} />
 
-        {identityAvailable && (
+        {identityAvailable && !identityRequested && !identitySettled && (
+          <section
+            aria-label="Optional identity check"
+            className="rounded-lg border border-border bg-surface-strong p-5 shadow-elev-1"
+          >
+            <div className="flex items-start gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent-soft text-accent">
+                <ScanFace className="size-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-card-title text-foreground">Identity check is optional</p>
+                <p className="mt-1 text-body-sm text-foreground-muted">
+                  The credential is already valid. You can compare the person with the registered
+                  credential photograph, or continue with credential verification only.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIdentityRequested(true)}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-md bg-accent px-4 text-body-sm font-semibold text-accent-foreground hover:bg-accent-strong"
+                  >
+                    <ScanFace className="size-4" aria-hidden="true" />
+                    Verify face
+                  </button>
+                  <Link
+                    to="/app/verify/receipt/$id"
+                    params={{ id: session.sessionId }}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border-strong bg-surface px-4 text-body-sm font-semibold text-foreground hover:bg-muted"
+                  >
+                    <CheckCircle2 className="size-4" aria-hidden="true" />
+                    Continue without face
+                  </Link>
+                </div>
+                <p className="mt-3 text-metadata text-foreground-subtle">
+                  The receipt will explicitly show that biometric identity verification was not performed.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {identityAvailable && (identityRequested || identitySettled) && (
           <IdentityPanel
             result={session.identity}
             busy={flow.identity.isPending}
@@ -132,7 +176,7 @@ function SessionPage() {
         )}
 
         <div className="flex flex-wrap items-center gap-3 border-t border-border pt-6">
-          {(terminal || identitySettled) && (
+          {receiptAvailable && (
             <Link
               to="/app/verify/receipt/$id"
               params={{ id: session.sessionId }}
